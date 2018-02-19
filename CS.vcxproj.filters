@@ -88,6 +88,9 @@
       <Filter>imgui</Filter>
     </ClCompile>
     <ClCompile Include="CS.cpp" />
+    <ClCompile Include="shader_manager.cpp" />
+    <ClCompile Include="buffer_manager.cpp" />
+    <ClCompile Include="scene.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imgui_internal.h">
@@ -111,6 +114,11 @@
     <ClInclude Include="imgui\imgui_impl_dx11.h">
       <Filter>imgui</Filter>
     </ClInclude>
+    <ClInclude Include="shader_manager.hpp" />
+    <ClInclude Include="buffer_manager.hpp" />
+    <ClInclude Include="tiny_obj_loader.h" />
+    <ClInclude Include="scene.hpp" />
+    <ClInclude Include="math3d.h" />
   </ItemGroup>
   <ItemGroup>
     <CLInclude Include="resource.h">
@@ -121,5 +129,9 @@
     <ResourceCompile Include="CS.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <FxCompile Include="ComputeShader.hlsl" />
+    <FxCompile Include="fixed_pipeline.hlsl" />
   </ItemGroup>
 </Project>
