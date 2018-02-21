@@ -5,7 +5,13 @@ StructuredBuffer<PrimitiveRender> primitives : register(t0);
 RWStructuredBuffer<TreeNode> tree : register(u0);
 RWTexture2D<unorm float4> output : register(u1);
 
-cbuffer RTCB : register(b0)
+// 对应于主机端的constant buffer  
+cbuffer RadixCB : register(b0)
+{
+	int node_count;
+	float3 g_pos;
+};
+cbuffer RTCB : register(b1)
 {
 	float4x4 invView;
 	float4x4 invModel;
@@ -14,10 +20,10 @@ cbuffer RTCB : register(b0)
 };
 
 
-#define STACK_SIZE 50
+#define STACK_SIZE 1000
 #define kEpsilon 1e-5
 
-bool intersection_bound(Ray ray, Bound bound) {
+bool intersection_bound(Ray ray, Bound bound ,out float tout) {
 	float t_min, t_max, t_xmin, t_xmax, t_ymin, t_ymax, t_zmin, t_zmax;
 	float x_a = 1.0 / ray.direction.x, y_a = 1.0 / ray.direction.y, z_a = 1.0 / ray.direction.z;
 	float  x_e = ray.origin.x, y_e = ray.origin.y, z_e = ray.origin.z;
@@ -55,7 +61,7 @@ bool intersection_bound(Ray ray, Bound bound) {
 	// find if there an intersection among three t intervals
 	t_min = max(t_xmin, max(t_ymin, t_zmin));
 	t_max = min(t_xmax, min(t_ymax, t_zmax));
-
+	tout = t_min;
 	return (t_min <= t_max);
 
 }
@@ -119,25 +125,52 @@ bool calc_barycentrics(int index, Ray ray, out float t, out float3 barycentrics)
 	return true; // this ray hits the triangle 
 }
 
-bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out float current_t) {
+bool calc_barycentrics2(int index, Ray ray, out float t, out float3 barycentrics) {
+	float3 P, T, Q;
+	float3 A = primitives[index].vertices[0].pos;
+	float3 B = primitives[index].vertices[1].pos;
+	float3 C = primitives[index].vertices[2].pos;
+	float3 E1 = B - A;
+	float3 E2 = C - A;
+	P = cross(ray.direction, E2);
+	float det = 1.0f / dot(E1, P);
+	T = ray.origin - A;
+	barycentrics.x = dot(T, P) * det;
+	Q = cross(T, E1);
+	barycentrics.y = dot(ray.direction, Q)*det;
+	t = dot(E2, Q)*det;
+	barycentrics.z = (1 - barycentrics.x - barycentrics.y);
+	if (barycentrics.x >= 0 && barycentrics.y >= 0 && barycentrics.x <= 1 && barycentrics.y <= 1)
+		return true;
+	return false;
+}
+
+bool intersect(in Ray ray, out int primitive_index, out float3 color, out float current_t) {
 	int stack[STACK_SIZE];
 	int stack_top = STACK_SIZE;
 	stack[--stack_top] = 0;
 
 	bool intersected = false;
-
 	current_t = 1000;
 
 	[allow_uav_condition]
 	while (stack_top != STACK_SIZE) {
 		int current = stack[stack_top++];
-		if (intersection_bound(ray, tree[current].bound)) {
-			if (tree[current].left = 0) {// leaf
-				float t;
-				if (calc_barycentrics(tree[current].index, ray, t, barycentrics)) {
-					if (current_t > t) {
+		float t;
+		if (intersection_bound(ray, tree[current].bound, t)) {
+			if (current >= node_count) {// leaf
+				float3 barycentrics;
+				if (calc_barycentrics2(tree[current].index, ray, t, barycentrics)) {
+					if (t > 0 && current_t > t) {
+						color = barycentrics;
 						current_t = t;
 						primitive_index = current;
+
+						float3 A = primitives[tree[current].index].vertices[0].normal;
+						float3 B = primitives[tree[current].index].vertices[1].normal;
+						float3 C = primitives[tree[current].index].vertices[2].normal;
+						color = A * barycentrics.x + B * barycentrics.y + C * barycentrics.z;
+
 						intersected = true;
 					}
 				}
@@ -145,9 +178,9 @@ bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out
 			else {
 				stack[--stack_top] = tree[current].right;
 				stack[--stack_top] = tree[current].left;
-
 				if (stack_top < 0) {
-					return false;
+					color = float3(0, 0, 0);
+					return true;
 				}
 			}
 		}
@@ -161,14 +194,14 @@ float3 tracing(Ray ray) {
 	float3 barycentrics;
 	float t;
 	if (intersect(ray, primitive_index, barycentrics, t)) {
-		return float3(1, 0, 1);
+		return barycentrics;
 	}
 	return float3(0.1, 0.2, 0.3);
 }
 
 
 
-[numthreads(1, 1, 1)]
+[numthreads(16, 16, 1)]
 void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 {
 	float2 d = ((launchIndex.xy / viewportDims) * 2.f - 1.f);
@@ -177,9 +210,12 @@ void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 	Ray ray;
 	float4x4 transInvView = invView;
 
-	ray.origin = transInvView[3].xyz;
-	ray.direction = normalize((d.x * transInvView[0].xyz * tanHalfFovY * aspectRatio) - (d.y * transInvView[1].xyz * tanHalfFovY) + transInvView[2].xyz);
-
+	ray.origin = g_pos;
+	float3 pixel = g_pos + float3(0, 0, -1);
+	pixel.x += d.x * aspectRatio;
+	pixel.y += -d.y;
+	//ray.direction = normalize((d.x * transInvView[0].xyz * 0.3 * aspectRatio) + (d.y * transInvView[1].xyz * 0.3) + transInvView[2].xyz);
+	ray.direction = normalize(pixel - ray.origin);
 	ray.t_min = 0;
 	ray.t_max = 100000;
 	output[launchIndex.xy] = float4(tracing(ray), 1);

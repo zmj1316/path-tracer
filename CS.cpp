@@ -22,6 +22,8 @@ ShaderManager shader_manager_;
 BufferManager compute_buffer_manager_;
 int localBuffer[NUM_ELEMENTS];
 
+vec3 g_pos{ 0,0,5 };
+
 #pragma pack(16)
 struct CB_VS_PER_FRAME
 {
@@ -82,18 +84,6 @@ HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFAC
 
 	HRESULT hr;
 	{
-		shader_manager_.CreateCS(L"radix_build_cs.hlsl", "CSMain");
-		compute_buffer_manager_.release();
-		auto tmp = malloc(sizeof(TreeNode) * NUM_ELEMENTS);
-		memset(tmp, 0, sizeof(TreeNode) * NUM_ELEMENTS);
-		compute_buffer_manager_.addStructUAV(sizeof(TreeNode), NUM_ELEMENTS, tmp);
-		free(tmp);
-		CB_Radix rcb;
-		rcb.node_count = 500;
-		compute_buffer_manager_.addCB(sizeof(CB_Radix), 1, &rcb);
-	}
-
-	{
 		shader_manager_.CreatePipelineShaders();
 		CB_VS_PER_FRAME tmp;
 		render_buffer_manager_.addCB(sizeof(CB_VS_PER_FRAME), 1, &tmp);
@@ -135,7 +125,34 @@ HRESULT CALLBACK OnD3D11ResizedSwapChain(ID3D11Device* pd3dDevice, IDXGISwapChai
 //--------------------------------------------------------------------------------------
 void CALLBACK OnFrameMove(double fTime, float fElapsedTime, void* pUserContext)
 {
+	float speed = 5;
 	g_Camera.FrameMove(fElapsedTime);
+	if(ImGui::GetIO().KeysDown['A'])
+	{
+		g_pos.v[0] -= fElapsedTime * speed;
+	}
+	if (ImGui::GetIO().KeysDown['D'])
+	{
+		g_pos.v[0] += fElapsedTime * speed;
+	}
+
+	if (ImGui::GetIO().KeysDown['Q'])
+	{
+		g_pos.v[1] -= fElapsedTime * speed;
+	}
+	if (ImGui::GetIO().KeysDown['E'])
+	{
+		g_pos.v[1] += fElapsedTime * speed;
+	}
+
+	if (ImGui::GetIO().KeysDown['W'])
+	{
+		g_pos.v[2] -= fElapsedTime * speed;
+	}
+	if (ImGui::GetIO().KeysDown['S'])
+	{
+		g_pos.v[2] += fElapsedTime * speed;
+	}
 }
 
 
@@ -146,28 +163,28 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
                                  double fTime, float fElapsedTime, void* pUserContext)
 {
 	HRESULT hr;
+
+	/* create query for synchronous dispatches */
+	D3D11_QUERY_DESC pQueryDesc;
+	pQueryDesc.Query = D3D11_QUERY_EVENT;
+	pQueryDesc.MiscFlags = 0;
+	ID3D11Query *pEventQuery;
+	pd3dDevice->CreateQuery(&pQueryDesc, &pEventQuery);
+
+
+
+	D3D11_MAPPED_SUBRESOURCE MappedResource;
+	V(pd3dImmediateContext->Map(ray_tracer.constant_buffers_[0], 0, D3D11_MAP_WRITE_DISCARD, 0, &
+		MappedResource));
+	CB_Radix* cb_vs_per_frame = (CB_Radix*)MappedResource.pData;
+	cb_vs_per_frame->pos = g_pos;
+	cb_vs_per_frame->node_count = ray_tracer.primitive_count;
+	pd3dImmediateContext->Unmap(ray_tracer.constant_buffers_[0], 0);
+
+
 	ray_tracer.run(pd3dImmediateContext);
-
-	//{
-	//	pd3dImmediateContext->CSSetShader(shader_manager_.compute_shaders_[0], nullptr, 0);
-	//	pd3dImmediateContext->CSSetShaderResources(0, compute_buffer_manager_.shader_resource_views.size(),
-	//	                                           compute_buffer_manager_.shader_resource_views.data());
-	//	pd3dImmediateContext->CSSetUnorderedAccessViews(0, compute_buffer_manager_.unordered_access_views.size(),
-	//	                                                compute_buffer_manager_.unordered_access_views.data(), nullptr);
-	//	pd3dImmediateContext->CSSetConstantBuffers(0, 1, &compute_buffer_manager_.constant_buffers_[0]);
-	//	pd3dImmediateContext->Dispatch((500 - 1) / 64 + 1, 1, 1);
-
-	//	pd3dImmediateContext->CSSetShader(nullptr, nullptr, 0);
-
-	//	ID3D11UnorderedAccessView* ppUAViewNULL[] = {nullptr, nullptr};
-	//	pd3dImmediateContext->CSSetUnorderedAccessViews(0, 2, ppUAViewNULL, nullptr);
-
-	//	ID3D11ShaderResourceView* ppSRVNULL[2] = {nullptr,nullptr};
-	//	pd3dImmediateContext->CSSetShaderResources(0, 2, ppSRVNULL);
-
-	//	ID3D11Buffer* ppCBNULL[1] = {nullptr};
-	//	pd3dImmediateContext->CSSetConstantBuffers(0, 1, ppCBNULL);
-	//}
+	pd3dImmediateContext->End(pEventQuery);
+	pEventQuery->Release();
 
 
 	// Clear render target and the depth stencil 

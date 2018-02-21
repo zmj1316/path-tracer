@@ -166,8 +166,9 @@ void RayTracer::trace()
 	pd3dImmediateContext_->CSSetShaderResources(0, 1, &shader_resource_views[primitive_render_srv_index]);
 	pd3dImmediateContext_->CSSetUnorderedAccessViews(0, 1, &unordered_access_views[tree_uav_index], nullptr);
 	pd3dImmediateContext_->CSSetUnorderedAccessViews(1, 1, &unordered_access_views[output_tex_uav_index], nullptr);
-	pd3dImmediateContext_->CSSetConstantBuffers(0, 1, &constant_buffers_[rt_cb_index]);
-	pd3dImmediateContext_->Dispatch(640, 480, 1);
+	pd3dImmediateContext_->CSSetConstantBuffers(0, 1, &constant_buffers_[radix_cb_index]);
+	pd3dImmediateContext_->CSSetConstantBuffers(1, 1, &constant_buffers_[rt_cb_index]);
+	pd3dImmediateContext_->Dispatch(640 / 16, 480 / 16 , 1);
 }
 
 void RayTracer::finish()

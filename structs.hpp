@@ -55,7 +55,7 @@ struct PrimitiveRayCS
 struct CB_Radix
 {
 	int node_count;
-	int pad0, pad1, pad2;
+	vec3 pos;
 };
 
 struct CB_RT
