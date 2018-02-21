@@ -15,7 +15,7 @@ BufferManager::~BufferManager()
 
 static bool CreateConstantBuffer(ID3D11Device* pDevice, uint32_t nBytes, void* pInitData, ID3D11Buffer** ppBufferOut)
 {
-	*ppBufferOut = NULL;
+	*ppBufferOut = nullptr;
 
 	D3D11_BUFFER_DESC desc;
 	ZeroMemory(&desc, sizeof(desc));
@@ -33,25 +33,66 @@ static bool CreateConstantBuffer(ID3D11Device* pDevice, uint32_t nBytes, void* p
 }
 
 static bool CreateStructureBuffer(ID3D11Device* pDevice, uint32_t elementSize, uint32_t uCount,
-	void* pInitData, ID3D11Buffer** ppBufferOut)
+                                  void* pInitData, ID3D11Buffer** ppBufferOut)
 {
-	*ppBufferOut = NULL;
+	*ppBufferOut = nullptr;
 
 	D3D11_BUFFER_DESC desc;
 	ZeroMemory(&desc, sizeof(desc));
 	desc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
-	desc.ByteWidth = elementSize*uCount;
+	desc.ByteWidth = elementSize * uCount;
 	desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_STRUCTURED;
 	desc.StructureByteStride = elementSize;
 
-	if (pInitData != NULL)
+	if (pInitData != nullptr)
 	{
-		D3D11_SUBRESOURCE_DATA InitData = { 0 };
+		D3D11_SUBRESOURCE_DATA InitData = {nullptr};
 		InitData.pSysMem = pInitData;
 		return pDevice->CreateBuffer(&desc, &InitData, ppBufferOut) >= 0;
 	}
-	else
-		return pDevice->CreateBuffer(&desc, NULL, ppBufferOut) >= 0;
+	return pDevice->CreateBuffer(&desc, nullptr, ppBufferOut) >= 0;
+}
+
+static bool CreateByteAddressBuffer(ID3D11Device* pDevice, uint32_t elementSize, uint32_t uCount,
+                                    void* pInitData, ID3D11Buffer** ppBufferOut)
+{
+	*ppBufferOut = nullptr;
+
+	D3D11_BUFFER_DESC desc;
+	ZeroMemory(&desc, sizeof(desc));
+	desc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+	desc.ByteWidth = elementSize * uCount;
+	desc.MiscFlags = D3D11_RESOURCE_MISC_BUFFER_ALLOW_RAW_VIEWS;
+	desc.StructureByteStride = elementSize;
+
+	if (pInitData != nullptr)
+	{
+		D3D11_SUBRESOURCE_DATA InitData = {nullptr};
+		InitData.pSysMem = pInitData;
+		return pDevice->CreateBuffer(&desc, &InitData, ppBufferOut) >= 0;
+	}
+	return pDevice->CreateBuffer(&desc, nullptr, ppBufferOut) >= 0;
+}
+
+static bool CreateTextureBuffer(ID3D11Device* pDevice, uint32_t stride, uint32_t width, uint32_t height,
+                                ID3D11Texture2D** ppBufferOut)
+{
+	*ppBufferOut = nullptr;
+
+	D3D11_TEXTURE2D_DESC  desc;
+	ZeroMemory(&desc, sizeof(desc));
+	desc.BindFlags = D3D11_BIND_UNORDERED_ACCESS | D3D11_BIND_SHADER_RESOURCE;
+	desc.MiscFlags = 0;
+	desc.Width = width;
+	desc.Height = height;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ;
+	desc.SampleDesc.Count = 1;
+
+
+	return pDevice->CreateTexture2D(&desc, nullptr, ppBufferOut) >= 0;
 }
 
 static bool CreateBufferSRV(ID3D11Device* pDevice, ID3D11Buffer* pBuffer, ID3D11ShaderResourceView** ppSRVOut)
@@ -82,7 +123,6 @@ static bool CreateBufferUAV(ID3D11Device* pDevice, ID3D11Buffer* pBuffer, ID3D11
 	ZeroMemory(&desc, sizeof(desc));
 	desc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
 	desc.Buffer.FirstElement = 0;
-
 	//假设这是一个structure buffer  
 	desc.Format = DXGI_FORMAT_UNKNOWN;
 	desc.Buffer.NumElements = descBuf.ByteWidth / descBuf.StructureByteStride;
@@ -90,11 +130,39 @@ static bool CreateBufferUAV(ID3D11Device* pDevice, ID3D11Buffer* pBuffer, ID3D11
 	return pDevice->CreateUnorderedAccessView((ID3D11Resource*)pBuffer, &desc, ppUAVOut) >= 0;
 }
 
+static bool CreateByteBufferUAV(ID3D11Device* pDevice, ID3D11Buffer* pBuffer, ID3D11UnorderedAccessView** ppUAVOut)
+{
+	D3D11_BUFFER_DESC descBuf;
+	ZeroMemory(&descBuf, sizeof(descBuf));
+	pBuffer->GetDesc(&descBuf);
+
+	D3D11_UNORDERED_ACCESS_VIEW_DESC desc;
+	ZeroMemory(&desc, sizeof(desc));
+	desc.ViewDimension = D3D11_UAV_DIMENSION_BUFFER;
+	desc.Buffer.FirstElement = 0;
+	desc.Buffer.Flags = D3D11_BUFFER_UAV_FLAG_RAW;
+
+	desc.Format = DXGI_FORMAT_R32_TYPELESS;
+	desc.Buffer.NumElements = descBuf.ByteWidth / sizeof(int32_t);
+
+	return pDevice->CreateUnorderedAccessView((ID3D11Resource*)pBuffer, &desc, ppUAVOut) >= 0;
+}
+
+static bool CreateTextureUAV(ID3D11Device* pDevice, ID3D11Texture2D* pBuffer, ID3D11UnorderedAccessView** ppUAVOut)
+{
+	D3D11_UNORDERED_ACCESS_VIEW_DESC desc;
+	ZeroMemory(&desc, sizeof(desc));
+	desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.Texture2D.MipSlice = 0;
+
+	return pDevice->CreateUnorderedAccessView((ID3D11Resource*)pBuffer, &desc, ppUAVOut) >= 0;
+}
 
 void BufferManager::addSRV(uint32_t strip, uint32_t count, void* data)
 {
 	ID3D11Buffer* buffer;
-	CreateStructureBuffer(DXUTGetD3D11Device(), strip, count, data,&buffer);
+	CreateStructureBuffer(DXUTGetD3D11Device(), strip, count, data, &buffer);
 	buffers_.emplace_back(buffer);
 
 	ID3D11ShaderResourceView* srv;
@@ -102,7 +170,7 @@ void BufferManager::addSRV(uint32_t strip, uint32_t count, void* data)
 	shader_resource_views.emplace_back(srv);
 }
 
-void BufferManager::addUAV(uint32_t strip, uint32_t count, void* data)
+void BufferManager::addStructUAV(uint32_t strip, uint32_t count, void* data)
 {
 	ID3D11Buffer* buffer;
 	CreateStructureBuffer(DXUTGetD3D11Device(), strip, count, data, &buffer);
@@ -113,6 +181,28 @@ void BufferManager::addUAV(uint32_t strip, uint32_t count, void* data)
 	unordered_access_views.emplace_back(srv);
 }
 
+void BufferManager::addByteUAV(uint32_t strip, uint32_t count, void* data)
+{
+	ID3D11Buffer* buffer;
+	CreateByteAddressBuffer(DXUTGetD3D11Device(), strip, count, data, &buffer);
+	buffers_.emplace_back(buffer);
+
+	ID3D11UnorderedAccessView* srv;
+	CreateByteBufferUAV(DXUTGetD3D11Device(), buffer, &srv);
+	unordered_access_views.emplace_back(srv);
+}
+
+void BufferManager::addTextureUAV(uint32_t strip, uint32_t width, uint32_t height)
+{
+	ID3D11Texture2D* buffer;
+	CreateTextureBuffer(DXUTGetD3D11Device(), strip, width, height, &buffer);
+	textures_.emplace_back(buffer);
+
+	ID3D11UnorderedAccessView* srv;
+	CreateTextureUAV(DXUTGetD3D11Device(), buffer, &srv);
+	unordered_access_views.emplace_back(srv);
+}
+
 void BufferManager::addCB(uint32_t strip, uint32_t count, void* data)
 {
 	ID3D11Buffer* buffer;
@@ -120,31 +210,13 @@ void BufferManager::addCB(uint32_t strip, uint32_t count, void* data)
 	constant_buffers_.push_back(buffer);
 }
 
+#define VECTOR_RELEASE(vec) for (auto&& i : vec) { if (i) { (i)->Release(); (i)=NULL; } } vec.clear();
 
 void BufferManager::release()
 {
-	for (auto && shader_resource_view : shader_resource_views)
-	{
-		SAFE_RELEASE(shader_resource_view);
-	}
-	shader_resource_views.clear();
-
-	for (auto && unordered_access_view : unordered_access_views)
-	{
-		SAFE_RELEASE(unordered_access_view);
-	}
-	unordered_access_views.clear();
-
-	for (auto && buffer : buffers_)
-	{
-		SAFE_RELEASE(buffer);
-	}
-	buffers_.clear();
-
-	for (auto && buffer : constant_buffers_)
-	{
-		SAFE_RELEASE(buffer);
-	}
-	constant_buffers_.clear();
-
+	VECTOR_RELEASE(shader_resource_views);
+	VECTOR_RELEASE(unordered_access_views);
+	VECTOR_RELEASE(constant_buffers_);
+	VECTOR_RELEASE(buffers_);
+	VECTOR_RELEASE(textures_);
 }

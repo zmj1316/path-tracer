@@ -10,7 +10,7 @@
 #pragma comment(lib,"d3d11.lib")
 #pragma comment(lib,"d3dcompiler.lib")
 
-ShaderManager::ShaderManager(): compute_shader_(nullptr)
+ShaderManager::ShaderManager(): vertex_shader_(nullptr), vertex_layout_(nullptr), pixel_shader_(nullptr)
 {
 }
 
@@ -203,9 +203,15 @@ static bool CreatePixelShader(LPCWSTR pSrcFile, LPCSTR pFunctionName, LPCSTR pPr
 	return result;
 }
 
-void ShaderManager::CreateCS()
+bool ShaderManager::CreateCS(LPCWSTR pSrcFile, LPCSTR pFunctionName)
 {
-	CreateComputeShader(L"ComputeShader.hlsl", "CSMain", DXUTGetD3D11Device(), &compute_shader_);
+	ID3D11ComputeShader * shader;
+	if (CreateComputeShader(pSrcFile, pFunctionName, DXUTGetD3D11Device(), &shader))
+	{
+		compute_shaders_.push_back(shader);
+		return true;
+	}
+	return false;
 }
 
 void ShaderManager::CreatePipelineShaders()
@@ -216,7 +222,10 @@ void ShaderManager::CreatePipelineShaders()
 
 void ShaderManager::release()
 {
-	SAFE_RELEASE(compute_shader_);
+	for (auto && compute_shader : compute_shaders_)
+	{
+		SAFE_RELEASE(compute_shader);
+	}
 	SAFE_RELEASE(vertex_shader_);
 	SAFE_RELEASE(vertex_layout_);
 	SAFE_RELEASE(pixel_shader_);

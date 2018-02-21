@@ -1,17 +1,4 @@
-struct Bound {
-	float3 min;
-	float padding0;
-	float3 max;
-	float padding1;
-};
- 
-struct TreeNode {
-	int left;   // primitive index if is leaf
-	int right;  // == 0 if is leaf
-	int parent;
-	int padding;
-	Bound bound;
-};
+#include "structs.hlsli"
 
 // 对应于主机端的constant buffer  
 cbuffer RadixCB : register(b0)

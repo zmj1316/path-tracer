@@ -2,6 +2,7 @@
 #include "math3d.h"
 #include <vector>
 #include "tiny_obj_loader.h"
+#include "structs.hpp"
 
 class Scene
 {
@@ -13,16 +14,6 @@ public:
 	void Scene::loadObj(const char* filename);
 	void buildBuffers(ID3D11Device* pDevice);
 	void release();
-	struct xyz
-	{
-		vec3 pos;
-	};
-
-	struct xyzn
-	{
-		vec3 pos;
-		vec3 normal;
-	};
 
 	struct geometry
 	{
@@ -47,6 +38,6 @@ public:
 
 	std::vector<geometry> geos;
 	std::vector<tinyobj::material_t> materials_;
-
+	int triangle_count = 0;
 };
 

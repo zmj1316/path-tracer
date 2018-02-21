@@ -12,32 +12,11 @@
 #include "buffer_manager.hpp"
 #include "scene.hpp"
 #include "DXUTcamera.h"
+#include "structs.hpp"
+#include "ray_tracer.hpp"
 
 
 #define  NUM_ELEMENTS   2048
-
-struct Bound
-{
-	float min[3];
-	float padding0;
-	float max[3];
-	float padding1;
-};
-
-struct TreeNode
-{
-	int left; // primitive index if is leaf
-	int right; // == 0 if is leaf
-	int parent;
-	int padding;
-	Bound bound;
-};
-
-struct CB_Radix
-{
-	int node_count;
-	int pad0, pad1, pad2;
-};
 
 ShaderManager shader_manager_;
 BufferManager compute_buffer_manager_;
@@ -62,10 +41,14 @@ BufferManager render_buffer_manager_;
 Scene scene;
 CModelViewerCamera g_Camera; // A model viewing camera
 
+RayTracer ray_tracer;
 
 static void initScene()
 {
 	scene.loadObj("scene01.obj");
+	ray_tracer.loadScene();
+	ray_tracer.loadShaders();
+	ray_tracer.createBuffers();
 }
 
 //--------------------------------------------------------------------------------------
@@ -94,15 +77,16 @@ bool CALLBACK ModifyDeviceSettings(DXUTDeviceSettings* pDeviceSettings, void* pU
 HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFACE_DESC* pBackBufferSurfaceDesc,
                                      void* pUserContext)
 {
+	initScene();
 	ImGui_ImplDX11_Init(DXUTGetHWNDDeviceWindowed(), pd3dDevice, DXUTGetD3D11DeviceContext());
 
 	HRESULT hr;
 	{
-		shader_manager_.CreateCS();
+		shader_manager_.CreateCS(L"radix_build_cs.hlsl", "CSMain");
 		compute_buffer_manager_.release();
 		auto tmp = malloc(sizeof(TreeNode) * NUM_ELEMENTS);
 		memset(tmp, 0, sizeof(TreeNode) * NUM_ELEMENTS);
-		compute_buffer_manager_.addUAV(sizeof(TreeNode), NUM_ELEMENTS, tmp);
+		compute_buffer_manager_.addStructUAV(sizeof(TreeNode), NUM_ELEMENTS, tmp);
 		free(tmp);
 		CB_Radix rcb;
 		rcb.node_count = 500;
@@ -118,12 +102,12 @@ HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFAC
 		scene.buildBuffers(pd3dDevice);
 
 		// Setup the camera's view parameters
-		D3DXVECTOR3 vecEye(0.0f, 5.0f, 5.0f);
-		D3DXVECTOR3 vecAt(0.0f, 5.0f, 0.0f);
+		D3DXVECTOR3 vecEye(0.0f, 0.0f, 5.0f);
+		D3DXVECTOR3 vecAt(0, 0, 0);
 		FLOAT fObjectRadius = 10.0f;
 
 		g_Camera.SetViewParams(&vecEye, &vecAt);
-		g_Camera.SetRadius(10.0f, 1.5f, fObjectRadius * 30.0f);
+		g_Camera.SetRadius(23.0f, 1.5f, fObjectRadius * 30.0f);
 	}
 	return S_OK;
 }
@@ -162,29 +146,28 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
                                  double fTime, float fElapsedTime, void* pUserContext)
 {
 	HRESULT hr;
+	ray_tracer.run(pd3dImmediateContext);
 
+	//{
+	//	pd3dImmediateContext->CSSetShader(shader_manager_.compute_shaders_[0], nullptr, 0);
+	//	pd3dImmediateContext->CSSetShaderResources(0, compute_buffer_manager_.shader_resource_views.size(),
+	//	                                           compute_buffer_manager_.shader_resource_views.data());
+	//	pd3dImmediateContext->CSSetUnorderedAccessViews(0, compute_buffer_manager_.unordered_access_views.size(),
+	//	                                                compute_buffer_manager_.unordered_access_views.data(), nullptr);
+	//	pd3dImmediateContext->CSSetConstantBuffers(0, 1, &compute_buffer_manager_.constant_buffers_[0]);
+	//	pd3dImmediateContext->Dispatch((500 - 1) / 64 + 1, 1, 1);
 
-	{
-		pd3dImmediateContext->CSSetShader(shader_manager_.compute_shader_, nullptr, 0);
-		pd3dImmediateContext->CSSetShaderResources(0, compute_buffer_manager_.shader_resource_views.size(),
-		                                           compute_buffer_manager_.shader_resource_views.data());
-		pd3dImmediateContext->CSSetUnorderedAccessViews(0, compute_buffer_manager_.unordered_access_views.size(),
-		                                                compute_buffer_manager_.unordered_access_views.data(), nullptr);
-		pd3dImmediateContext->CSSetConstantBuffers(0, 1, &compute_buffer_manager_.constant_buffers_[0]);
-		pd3dImmediateContext->Dispatch((500 - 1) / 64 + 1, 1, 1);
+	//	pd3dImmediateContext->CSSetShader(nullptr, nullptr, 0);
 
-		//清空Shader和各个Shader Resource View、Unordered Access View以及一些Constant Buffer  
-		pd3dImmediateContext->CSSetShader(nullptr, nullptr, 0);
+	//	ID3D11UnorderedAccessView* ppUAViewNULL[] = {nullptr, nullptr};
+	//	pd3dImmediateContext->CSSetUnorderedAccessViews(0, 2, ppUAViewNULL, nullptr);
 
-		ID3D11UnorderedAccessView* ppUAViewNULL[] = {nullptr, nullptr};
-		pd3dImmediateContext->CSSetUnorderedAccessViews(0, 2, ppUAViewNULL, nullptr);
+	//	ID3D11ShaderResourceView* ppSRVNULL[2] = {nullptr,nullptr};
+	//	pd3dImmediateContext->CSSetShaderResources(0, 2, ppSRVNULL);
 
-		ID3D11ShaderResourceView* ppSRVNULL[2] = {nullptr,nullptr};
-		pd3dImmediateContext->CSSetShaderResources(0, 2, ppSRVNULL);
-
-		ID3D11Buffer* ppCBNULL[1] = {nullptr};
-		pd3dImmediateContext->CSSetConstantBuffers(0, 1, ppCBNULL);
-	}
+	//	ID3D11Buffer* ppCBNULL[1] = {nullptr};
+	//	pd3dImmediateContext->CSSetConstantBuffers(0, 1, ppCBNULL);
+	//}
 
 
 	// Clear render target and the depth stencil 
@@ -194,15 +177,19 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 	ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
 	pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor);
 	pd3dImmediateContext->ClearDepthStencilView(pDSV, D3D11_CLEAR_DEPTH, 1.0, 0);
-
-
+	ID3D11Resource* r;
+	pRTV->GetResource(&r);
+	pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[0]);
+	SAFE_RELEASE(r);
+	if(0)
 	{
 		D3DXMATRIX mWorldViewProjection;
 		D3DXVECTOR3 vLightDir;
 		D3DXMATRIX mWorld;
 		D3DXMATRIX mView;
 		D3DXMATRIX mProj;
-		mWorld = *g_Camera.GetWorldMatrix();
+		D3DXMatrixTranslation(&mWorld, 0, -5, 0);
+		mWorld = mWorld * *g_Camera.GetWorldMatrix();
 		mProj = *g_Camera.GetProjMatrix();
 		mView = *g_Camera.GetViewMatrix();
 
@@ -210,11 +197,12 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 
 
 		D3D11_MAPPED_SUBRESOURCE MappedResource;
-		V(pd3dImmediateContext->Map(render_buffer_manager_.constant_buffers_[0], 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource));
-		CB_VS_PER_FRAME* pVSPerObject = (CB_VS_PER_FRAME*)MappedResource.pData;
-		D3DXMatrixTranspose(&pVSPerObject->m_WorldViewProj, &mWorldViewProjection);
-		D3DXMatrixTranspose(&pVSPerObject->m_World, &mWorld);
-		pVSPerObject->light_dir = vec4{1, 0, 0,0};
+		V(pd3dImmediateContext->Map(render_buffer_manager_.constant_buffers_[0], 0, D3D11_MAP_WRITE_DISCARD, 0, &
+			MappedResource));
+		CB_VS_PER_FRAME* cb_vs_per_frame = (CB_VS_PER_FRAME*)MappedResource.pData;
+		D3DXMatrixTranspose(&cb_vs_per_frame->m_WorldViewProj, &mWorldViewProjection);
+		D3DXMatrixTranspose(&cb_vs_per_frame->m_World, &mWorld);
+		cb_vs_per_frame->light_dir = vec4{1, 0, 0,0};
 		pd3dImmediateContext->Unmap(render_buffer_manager_.constant_buffers_[0], 0);
 
 		pd3dImmediateContext->VSSetShader(shader_manager_.vertex_shader_, nullptr, 0);
@@ -225,23 +213,24 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		pd3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 		for (auto&& geo : scene.geos)
 		{
-			uint32_t stride = sizeof(Scene::xyzn);
+			uint32_t stride = sizeof(xyzn);
 			uint32_t offset = 0;
 			pd3dImmediateContext->IASetVertexBuffers(0, 1, &geo.vertex_buffer_, &stride, &offset);
 			for (int i = 0; i < geo.indicess.size(); ++i)
 			{
-				V(pd3dImmediateContext->Map(render_buffer_manager_.constant_buffers_[1], 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource));
-				CB_VS_PER_DP* pVSPerObject = (CB_VS_PER_DP*)MappedResource.pData;
+				V(pd3dImmediateContext->Map(render_buffer_manager_.constant_buffers_[1], 0, D3D11_MAP_WRITE_DISCARD, 0, &
+					MappedResource));
+				CB_VS_PER_DP* cb_vs_per_dp = (CB_VS_PER_DP*)MappedResource.pData;
 				auto matid = geo.material_ids[i];
-				pVSPerObject->params.x = (matid & 1) ? 1 : 0;
-				pVSPerObject->params.y = (matid & 2) ? 1 : 0;
-				pVSPerObject->params.z = (matid & 4) ? 1 : 0;
+				cb_vs_per_dp->params.x = (matid & 1) ? 1 : 0;
+				cb_vs_per_dp->params.y = (matid & 2) ? 1 : 0;
+				cb_vs_per_dp->params.z = (matid & 4) ? 1 : 0;
 				pd3dImmediateContext->Unmap(render_buffer_manager_.constant_buffers_[1], 0);
 				pd3dImmediateContext->PSSetConstantBuffers(1, 1, &render_buffer_manager_.constant_buffers_[1]);
 
 
 				pd3dImmediateContext->IASetIndexBuffer(geo.index_buffers_[i], DXGI_FORMAT_R32_UINT, 0);
-				pd3dImmediateContext->DrawIndexed(geo.indicess[i].size() , 0, 0);
+				pd3dImmediateContext->DrawIndexed(geo.indicess[i].size(), 0, 0);
 			}
 		}
 	}
@@ -332,7 +321,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 #if defined(DEBUG) | defined(_DEBUG)
 	_CrtSetDbgFlag(_CRTDBG_ALLOC_MEM_DF | _CRTDBG_LEAK_CHECK_DF);
 #endif
-	initScene();
 	// DXUT will create and use the best device (either D3D9 or D3D11) 
 	// that is available on the system depending on which D3D callbacks are set below
 
@@ -367,5 +355,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 	compute_buffer_manager_.release();
 	render_buffer_manager_.release();
 	scene.release();
+	ray_tracer.release();
 	return DXUTGetExitCode();
 }

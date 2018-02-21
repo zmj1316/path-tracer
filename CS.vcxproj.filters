@@ -76,6 +76,7 @@
     <ClCompile Include="DXUT\Optional\SDKmisc.cpp">
       <Filter>DXUT</Filter>
     </ClCompile>
+    <None Include="structs.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="imgui\imgui_draw.cpp">
@@ -91,6 +92,7 @@
     <ClCompile Include="shader_manager.cpp" />
     <ClCompile Include="buffer_manager.cpp" />
     <ClCompile Include="scene.cpp" />
+    <ClCompile Include="ray_tracer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="imgui\imgui_internal.h">
@@ -119,6 +121,8 @@
     <ClInclude Include="tiny_obj_loader.h" />
     <ClInclude Include="scene.hpp" />
     <ClInclude Include="math3d.h" />
+    <ClInclude Include="structs.hpp" />
+    <ClInclude Include="ray_tracer.hpp" />
   </ItemGroup>
   <ItemGroup>
     <CLInclude Include="resource.h">
@@ -131,7 +135,10 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="ComputeShader.hlsl" />
     <FxCompile Include="fixed_pipeline.hlsl" />
+    <FxCompile Include="radix_build_cs.hlsl" />
+    <FxCompile Include="bvh_build_cs.hlsl" />
+    <FxCompile Include="intersect.hlsl" />
+    <FxCompile Include="ray_tracing.hlsl" />
   </ItemGroup>
 </Project>

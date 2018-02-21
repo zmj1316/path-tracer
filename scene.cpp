@@ -279,6 +279,7 @@ void Scene::loadObj(const char* filename)
 				geo.vertices_pos.push_back({pos[2- i]});
 				geo.vertices_xyzn.push_back({pos[2- i],normal[2 - i]});
 			}
+			triangle_count++;
 		}
 		geos.push_back(geo);
 	}
