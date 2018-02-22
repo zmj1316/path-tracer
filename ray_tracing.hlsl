@@ -21,7 +21,7 @@ cbuffer RTCB : register(b1)
 
 
 #define STACK_SIZE 1000
-#define kEpsilon 1e-5
+#define kEpsilon 1e-8
 
 bool intersection_bound(Ray ray, Bound bound ,out float tout) {
 	float t_min, t_max, t_xmin, t_xmax, t_ymin, t_ymax, t_zmin, t_zmax;
@@ -140,9 +140,44 @@ bool calc_barycentrics2(int index, Ray ray, out float t, out float3 barycentrics
 	barycentrics.y = dot(ray.direction, Q)*det;
 	t = dot(E2, Q)*det;
 	barycentrics.z = (1 - barycentrics.x - barycentrics.y);
-	if (barycentrics.x >= 0 && barycentrics.y >= 0 && barycentrics.x <= 1 && barycentrics.y <= 1)
+	if (barycentrics.x >= kEpsilon && barycentrics.y >= kEpsilon && barycentrics.z >= kEpsilon)
 		return true;
 	return false;
+}
+
+bool calc_barycentrics3(int index, Ray ray, out float t, out float3 barycentrics) {
+	float3 a = primitives[index].vertices[0].pos;
+	float3 b = primitives[index].vertices[1].pos;
+	float3 c = primitives[index].vertices[2].pos;
+	float3 e_1 = b - a, e_2 = c - a;
+	float3 n = cross(e_1, e_2);
+	float3 q = cross(ray.direction, e_2);
+	float a1 = dot(e_1, q);
+	if ((dot(n, ray.direction)) >= 0 || abs(a1) <= kEpsilon) {
+		t = -1;
+		return false;
+	}
+
+	float3 s = (ray.origin - a) / a1;
+	float3 r = cross(s, e_1);
+	barycentrics.x = dot(s,q);
+	barycentrics.y = dot(r,ray.direction);
+	barycentrics.z = 1 - barycentrics.x - barycentrics.y;
+	t = dot(e_2,r);
+	if (barycentrics.x >= kEpsilon && barycentrics.y >= kEpsilon && barycentrics.z >= kEpsilon)
+		return t >= 0;
+	return false;
+
+
+	//float d00 = Dot(v0, v0);
+	//float d01 = Dot(v0, v1);
+	//float d11 = Dot(v1, v1);
+	//float d20 = Dot(v2, v0);
+	//float d21 = Dot(v2, v1);
+	//float denom = d00 * d11 - d01 * d01;
+	//barycentrics.x = (d11 * d20 - d01 * d21) / denom;
+	//barycentrics.y = (d00 * d21 - d01 * d20) / denom;
+	//barycentrics.z = 1.0f - v - w;
 }
 
 bool intersect(in Ray ray, out int primitive_index, out float3 color, out float current_t) {
@@ -161,7 +196,7 @@ bool intersect(in Ray ray, out int primitive_index, out float3 color, out float 
 			if (current >= node_count) {// leaf
 				float3 barycentrics;
 				if (calc_barycentrics2(tree[current].index, ray, t, barycentrics)) {
-					if (t > 0 && current_t > t) {
+					if (current_t > t) {
 						color = barycentrics;
 						current_t = t;
 						primitive_index = current;
@@ -169,8 +204,12 @@ bool intersect(in Ray ray, out int primitive_index, out float3 color, out float 
 						float3 A = primitives[tree[current].index].vertices[0].normal;
 						float3 B = primitives[tree[current].index].vertices[1].normal;
 						float3 C = primitives[tree[current].index].vertices[2].normal;
-						color = A * barycentrics.x + B * barycentrics.y + C * barycentrics.z;
-
+						color = primitives[tree[current].index].vertices[0].normal;
+						color = A * barycentrics.z + B * barycentrics.x + C * barycentrics.y;
+						// gamma correction
+						color.x = pow(color.x, 0.45);
+						color.y = pow(color.y, 0.45);
+						color.z = pow(color.z, 0.45);
 						intersected = true;
 					}
 				}
@@ -212,8 +251,8 @@ void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 
 	ray.origin = g_pos;
 	float3 pixel = g_pos + float3(0, 0, -1);
-	pixel.x += d.x * aspectRatio;
-	pixel.y += -d.y;
+	pixel.x += -d.x * aspectRatio * tanHalfFovY;
+	pixel.y += -d.y * tanHalfFovY;
 	//ray.direction = normalize((d.x * transInvView[0].xyz * 0.3 * aspectRatio) + (d.y * transInvView[1].xyz * 0.3) + transInvView[2].xyz);
 	ray.direction = normalize(pixel - ray.origin);
 	ray.t_min = 0;

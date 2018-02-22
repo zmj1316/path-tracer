@@ -44,7 +44,7 @@ VS_OUTPUT VSMain(VS_INPUT Input)
 	VS_OUTPUT Output;
 
 	Output.vPosition = mul(Input.vPosition, g_mWorldViewProjection);
-	Output.vNormal = mul(Input.vNormal, (float3x3)g_mWorld);
+	Output.vNormal = Input.vNormal;
 	return Output;
 }
 
@@ -53,5 +53,5 @@ float4 PSMain(VS_OUTPUT Input) : SV_TARGET
 	//float light = Input.vNormal * g_vLightDir;
 	float light = Input.vNormal * g_vLightDir;
 	float3 diffuse = params.xyz;
-	return float4(diffuse, 1);
+	return float4(Input.vNormal, 1);
 }

@@ -21,8 +21,10 @@
 ShaderManager shader_manager_;
 BufferManager compute_buffer_manager_;
 int localBuffer[NUM_ELEMENTS];
+static bool ray = true;
+vec3 g_pos{0,5,20};
 
-vec3 g_pos{ 0,0,5 };
+ID3D11RasterizerState* g_noculling_state;
 
 #pragma pack(16)
 struct CB_VS_PER_FRAME
@@ -99,6 +101,22 @@ HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFAC
 		g_Camera.SetViewParams(&vecEye, &vecAt);
 		g_Camera.SetRadius(23.0f, 1.5f, fObjectRadius * 30.0f);
 	}
+
+
+	{
+		D3D11_RASTERIZER_DESC rasterDesc;
+		rasterDesc.AntialiasedLineEnable = false;
+		rasterDesc.CullMode = D3D11_CULL_NONE;
+		rasterDesc.DepthBias = 0;
+		rasterDesc.DepthBiasClamp = 0.0f;
+		rasterDesc.DepthClipEnable = true;
+		rasterDesc.FillMode = D3D11_FILL_SOLID;
+		rasterDesc.FrontCounterClockwise = false;
+		rasterDesc.MultisampleEnable = false;
+		rasterDesc.ScissorEnable = false;
+		rasterDesc.SlopeScaledDepthBias = 0.0f;
+		V(pd3dDevice->CreateRasterizerState(&rasterDesc, &g_noculling_state));
+	}
 	return S_OK;
 }
 
@@ -127,7 +145,7 @@ void CALLBACK OnFrameMove(double fTime, float fElapsedTime, void* pUserContext)
 {
 	float speed = 5;
 	g_Camera.FrameMove(fElapsedTime);
-	if(ImGui::GetIO().KeysDown['A'])
+	if (ImGui::GetIO().KeysDown['A'])
 	{
 		g_pos.v[0] -= fElapsedTime * speed;
 	}
@@ -163,30 +181,6 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
                                  double fTime, float fElapsedTime, void* pUserContext)
 {
 	HRESULT hr;
-
-	/* create query for synchronous dispatches */
-	D3D11_QUERY_DESC pQueryDesc;
-	pQueryDesc.Query = D3D11_QUERY_EVENT;
-	pQueryDesc.MiscFlags = 0;
-	ID3D11Query *pEventQuery;
-	pd3dDevice->CreateQuery(&pQueryDesc, &pEventQuery);
-
-
-
-	D3D11_MAPPED_SUBRESOURCE MappedResource;
-	V(pd3dImmediateContext->Map(ray_tracer.constant_buffers_[0], 0, D3D11_MAP_WRITE_DISCARD, 0, &
-		MappedResource));
-	CB_Radix* cb_vs_per_frame = (CB_Radix*)MappedResource.pData;
-	cb_vs_per_frame->pos = g_pos;
-	cb_vs_per_frame->node_count = ray_tracer.primitive_count;
-	pd3dImmediateContext->Unmap(ray_tracer.constant_buffers_[0], 0);
-
-
-	ray_tracer.run(pd3dImmediateContext);
-	pd3dImmediateContext->End(pEventQuery);
-	pEventQuery->Release();
-
-
 	// Clear render target and the depth stencil 
 	float ClearColor[4] = {0.176f, 0.196f, 0.667f, 0.0f};
 
@@ -194,11 +188,39 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 	ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
 	pd3dImmediateContext->ClearRenderTargetView(pRTV, ClearColor);
 	pd3dImmediateContext->ClearDepthStencilView(pDSV, D3D11_CLEAR_DEPTH, 1.0, 0);
-	ID3D11Resource* r;
-	pRTV->GetResource(&r);
-	pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[0]);
-	SAFE_RELEASE(r);
-	if(0)
+
+	pd3dImmediateContext->RSSetState(g_noculling_state);
+	if (ray)
+	{
+		/* create query for synchronous dispatches */
+		D3D11_QUERY_DESC pQueryDesc;
+		pQueryDesc.Query = D3D11_QUERY_EVENT;
+		pQueryDesc.MiscFlags = 0;
+		ID3D11Query* pEventQuery;
+		pd3dDevice->CreateQuery(&pQueryDesc, &pEventQuery);
+
+
+		D3D11_MAPPED_SUBRESOURCE MappedResource;
+		V(pd3dImmediateContext->Map(ray_tracer.constant_buffers_[0], 0, D3D11_MAP_WRITE_DISCARD, 0, &
+			MappedResource));
+		CB_Radix* cb_vs_per_frame = (CB_Radix*)MappedResource.pData;
+		cb_vs_per_frame->pos = g_pos;
+		cb_vs_per_frame->node_count = ray_tracer.primitive_count;
+		pd3dImmediateContext->Unmap(ray_tracer.constant_buffers_[0], 0);
+
+
+		ray_tracer.run(pd3dImmediateContext);
+		pd3dImmediateContext->End(pEventQuery);
+		pEventQuery->Release();
+
+		ID3D11Resource* r;
+		pRTV->GetResource(&r);
+		pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[0]);
+		SAFE_RELEASE(r);
+	}
+
+
+	if (!ray)
 	{
 		D3DXMATRIX mWorldViewProjection;
 		D3DXVECTOR3 vLightDir;
@@ -255,6 +277,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 	ImGui_ImplDX11_NewFrame();
 	{
 		static float f = 0.0f;
+		ImGui::Checkbox("Ray?", &ray);
 		ImGui::Text("Hello, world!");
 		ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
 		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
@@ -295,8 +318,11 @@ LRESULT CALLBACK MsgProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam,
 	if (uMsg == WM_KEYDOWN && ImGui::GetIO().WantCaptureKeyboard)
 		return 0;
 
-	// Pass all remaining windows messages to camera so it can respond to user input
-	g_Camera.HandleMessages(hWnd, uMsg, wParam, lParam);
+	if (!ray)
+	{
+		// Pass all remaining windows messages to camera so it can respond to user input
+		g_Camera.HandleMessages(hWnd, uMsg, wParam, lParam);
+	}
 
 	return 0;
 }
@@ -373,5 +399,6 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPWSTR lpCmdLi
 	render_buffer_manager_.release();
 	scene.release();
 	ray_tracer.release();
+	SAFE_RELEASE(g_noculling_state);
 	return DXUTGetExitCode();
 }
