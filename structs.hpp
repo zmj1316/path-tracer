@@ -60,11 +60,10 @@ struct CB_Radix
 
 struct CB_RT
 {
-	D3DXMATRIX invView;
-	D3DXMATRIX invModel;
 	D3DXVECTOR2 viewportDims;
-	float tanHalfFovY;
-	int randomSeed;
+	float tanHalfFovY = 0;
+	int framecount;
+	int offset[16] = {0};
 };
 
 constexpr int MORTON_CODE_LENGTH_EACH = 21;

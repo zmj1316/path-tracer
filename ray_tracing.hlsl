@@ -1,6 +1,8 @@
 #include "structs.hlsli"
+#include "helpers.hlsli"
 
 StructuredBuffer<PrimitiveRender> primitives : register(t0);
+Texture2D<unorm float4> old_texture : register(t1);
 
 RWStructuredBuffer<TreeNode> tree : register(u0);
 RWTexture2D<unorm float4> output : register(u1);
@@ -13,15 +15,15 @@ cbuffer RadixCB : register(b0)
 };
 cbuffer RTCB : register(b1)
 {
-	float4x4 invView;
-	float4x4 invModel;
 	float2 viewportDims;
 	float tanHalfFovY;
+	uint framecount;
+	int g_tid_offset[16];
 };
 
 
-#define STACK_SIZE 1000
-#define kEpsilon 1e-8
+#define STACK_SIZE 4000
+#define kEpsilon 1e-4
 
 bool intersection_bound(Ray ray, Bound bound ,out float tout) {
 	float t_min, t_max, t_xmin, t_xmax, t_ymin, t_ymax, t_zmin, t_zmax;
@@ -140,7 +142,7 @@ bool calc_barycentrics2(int index, Ray ray, out float t, out float3 barycentrics
 	barycentrics.y = dot(ray.direction, Q)*det;
 	t = dot(E2, Q)*det;
 	barycentrics.z = (1 - barycentrics.x - barycentrics.y);
-	if (barycentrics.x >= kEpsilon && barycentrics.y >= kEpsilon && barycentrics.z >= kEpsilon)
+	if (barycentrics.x >= -kEpsilon && barycentrics.y >= -kEpsilon && barycentrics.z >= -kEpsilon)
 		return true;
 	return false;
 }
@@ -153,7 +155,7 @@ bool calc_barycentrics3(int index, Ray ray, out float t, out float3 barycentrics
 	float3 n = cross(e_1, e_2);
 	float3 q = cross(ray.direction, e_2);
 	float a1 = dot(e_1, q);
-	if ((dot(n, ray.direction)) >= 0 || abs(a1) <= kEpsilon) {
+	if (/*(dot(n, ray.direction)) <= 0 || */abs(a1) <= kEpsilon) {
 		t = -1;
 		return false;
 	}
@@ -164,8 +166,8 @@ bool calc_barycentrics3(int index, Ray ray, out float t, out float3 barycentrics
 	barycentrics.y = dot(r,ray.direction);
 	barycentrics.z = 1 - barycentrics.x - barycentrics.y;
 	t = dot(e_2,r);
-	if (barycentrics.x >= kEpsilon && barycentrics.y >= kEpsilon && barycentrics.z >= kEpsilon)
-		return t >= 0;
+	if (barycentrics.x >= -kEpsilon && barycentrics.y >= -kEpsilon && barycentrics.z >= -kEpsilon)
+		return t >= kEpsilon;
 	return false;
 
 
@@ -180,7 +182,7 @@ bool calc_barycentrics3(int index, Ray ray, out float t, out float3 barycentrics
 	//barycentrics.z = 1.0f - v - w;
 }
 
-bool intersect(in Ray ray, out int primitive_index, out float3 color, out float current_t) {
+bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out float current_t) {
 	int stack[STACK_SIZE];
 	int stack_top = STACK_SIZE;
 	stack[--stack_top] = 0;
@@ -194,22 +196,12 @@ bool intersect(in Ray ray, out int primitive_index, out float3 color, out float 
 		float t;
 		if (intersection_bound(ray, tree[current].bound, t)) {
 			if (current >= node_count) {// leaf
-				float3 barycentrics;
-				if (calc_barycentrics2(tree[current].index, ray, t, barycentrics)) {
+				float3 tmp;
+				if (calc_barycentrics3(tree[current].index, ray, t, tmp)) {
 					if (current_t > t) {
-						color = barycentrics;
+						barycentrics = tmp;
 						current_t = t;
-						primitive_index = current;
-
-						float3 A = primitives[tree[current].index].vertices[0].normal;
-						float3 B = primitives[tree[current].index].vertices[1].normal;
-						float3 C = primitives[tree[current].index].vertices[2].normal;
-						color = primitives[tree[current].index].vertices[0].normal;
-						color = A * barycentrics.z + B * barycentrics.x + C * barycentrics.y;
-						// gamma correction
-						color.x = pow(color.x, 0.45);
-						color.y = pow(color.y, 0.45);
-						color.z = pow(color.z, 0.45);
+						primitive_index = tree[current].index;
 						intersected = true;
 					}
 				}
@@ -218,7 +210,7 @@ bool intersect(in Ray ray, out int primitive_index, out float3 color, out float 
 				stack[--stack_top] = tree[current].right;
 				stack[--stack_top] = tree[current].left;
 				if (stack_top < 0) {
-					color = float3(0, 0, 0);
+					barycentrics = float3(1, 1, 1);
 					return true;
 				}
 			}
@@ -227,35 +219,145 @@ bool intersect(in Ray ray, out int primitive_index, out float3 color, out float 
 	return intersected;
 }
 
-
-float3 tracing(Ray ray) {
+#define MAX_ITR 5
+float3 tracing(Ray ray, int2 rand2) {
 	int primitive_index;
 	float3 barycentrics;
 	float t;
-	if (intersect(ray, primitive_index, barycentrics, t)) {
-		return barycentrics;
+	uint seed = rand_init(rand2.x + framecount,rand2.y + g_tid_offset[rand2.x&15]);
+	//uint seed = framecount;
+	Ray this_ray = ray;
+	float3 color = float3(0, 0, 0);
+	int itr = 0;
+	float3 multi = float3(1,1,1);
+
+	[allow_uav_condition]
+	while (intersect(this_ray, primitive_index, barycentrics, t)) {
+		int id = primitives[primitive_index].matid;
+		seed += t * barycentrics.x;
+		seed += id;
+
+		if (itr >= MAX_ITR) {
+			break;
+			//if (rand_next(seed) < p) {
+			//	multi = multi * (1 / p);
+			//}
+			//else {
+			//	break;
+			//}
+		}
+
+		if ( id == 1) {
+			color += multi * float3(10, 10, 10);
+			break;
+		}
+		else{
+			float3 A = primitives[primitive_index].vertices[0].normal;
+			float3 B = primitives[primitive_index].vertices[1].normal;
+			float3 C = primitives[primitive_index].vertices[2].normal;
+			float3 normal = A * barycentrics.z + B * barycentrics.x + C * barycentrics.y;
+
+			float3 hitPoint = this_ray.origin + t * this_ray.direction;
+
+			this_ray.origin = hitPoint;
+			if (id == 0) {
+				float cos = -dot(this_ray.direction, normal);
+				float n = 1 / 1.5;
+				float cost2 = 1 - n*n*(1 - cos*cos);
+				if (cost2 > 0.0f)
+				{
+					this_ray.direction = normalize((n * this_ray.direction) - (n * cos + sqrt(cost2)) * normal);
+				}
+				else {
+					n = 1 / n;
+					this_ray.direction = normalize((n * this_ray.direction) - (n * cos + sqrt(cost2)) * normal);
+				}
+			}
+			else if (id == 6) {
+				this_ray.direction = reflect(this_ray.direction, normal);
+			}
+			else {
+				if (id == 4)
+					multi *= float3(0.1, 0.1, 0.9);
+				else if (id == 3)
+					multi *= float3(0.9, 0.1, 0.1);
+
+				//float r1 = 2 * MY_PI * ((1.0f * (framecount & 0x1F) / 0x1F) + rand_next(seed) / 0x20);
+				float r1 = 2 * MY_PI * ( rand_next(seed));
+				float r2 = rand_next(seed);
+				float r2s = sqrt(r2);
+				float3 w = normal;
+				float3 u;
+				if (abs(w.x) > 0.1) {
+					u = cross(w, float3(0, 1, 0));
+				}
+				else {
+					u = cross(w, float3(1, 0, 0));
+				}
+				u = normalize(u);
+				float3 v = (cross(w, u));
+				this_ray.direction = normalize(u*cos(r1)*r2s + v * sin(r1)*r2s + w * sqrt(1 - r2));
+			}
+		}
+		itr++;
 	}
-	return float3(0.1, 0.2, 0.3);
+	return color;
 }
 
+//color = primitives[primitive_index].vertices[0].pos * 0.1;
+//// gamma correction
+//color.x = pow(color.x, 0.45);
+//color.y = pow(color.y, 0.45);
+//color.z = pow(color.z, 0.45);
+//return color;
 
+//uint pack(float3 rgb) {
+//	return (int(0xFF * rgb.x) << 16) | int(0xFF * rgb.y) << 8 | int(0xFF * rgb.z);
+//}
 
-[numthreads(16, 16, 1)]
+[numthreads(8, 8, 1)]
 void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 {
+	//launchIndex.x += g_tid_offset[0];
+	//launchIndex.y += g_tid_offset[1];
 	float2 d = ((launchIndex.xy / viewportDims) * 2.f - 1.f);
 	float aspectRatio = viewportDims.x / viewportDims.y;
 
-	Ray ray;
-	float4x4 transInvView = invView;
+	uint seed = rand_init(g_tid_offset[0], g_tid_offset[1]);
 
+	float r1 = rand_next(seed);
+	float r2 = rand_next(seed);
+	r1 = (r1*r1 - 0.5) / viewportDims.x / 2;
+	r2 = (r2*r2 - 0.5) / viewportDims.y / 2;
+	Ray ray;
 	ray.origin = g_pos;
 	float3 pixel = g_pos + float3(0, 0, -1);
-	pixel.x += -d.x * aspectRatio * tanHalfFovY;
-	pixel.y += -d.y * tanHalfFovY;
+	pixel.x += -d.x * aspectRatio * 0.25 + r1;
+	pixel.y += -d.y * 0.25 + r2;
 	//ray.direction = normalize((d.x * transInvView[0].xyz * 0.3 * aspectRatio) + (d.y * transInvView[1].xyz * 0.3) + transInvView[2].xyz);
 	ray.direction = normalize(pixel - ray.origin);
 	ray.t_min = 0;
 	ray.t_max = 100000;
-	output[launchIndex.xy] = float4(tracing(ray), 1);
+	float4 this_color = float4(tracing(ray, launchIndex.xy),1);
+	//if (g_tid_offset[2] < 1000)
+	//	output[launchIndex.xy] = this_color;
+	//else {
+	//	output[launchIndex.xy] = old_texture[launchIndex.xy];
+	//}
+	//output[launchIndex.xy] = this_color;
+	int2 sampleid = launchIndex.xy;
+
+	//float r3 = rand_next(seed);
+	//if (r3 < 0.025)
+	//	sampleid.x--;
+	//else if (r3 > 0.975)
+	//	sampleid.x++;
+
+	//float r4 = rand_next(seed);
+	//if (r4 < 0.025)
+	//	sampleid.y--;
+	//else if (r4 > 0.975)
+	//	sampleid.y++;
+	output[launchIndex.xy] = (old_texture[sampleid/* + float2((rand_next(seed)) / 2, (rand_next(seed)) / 2)*/] * framecount + this_color) / (framecount + 1);
+	//output[launchIndex.xy] = float4(tanHalfFovY,0,0,1);
 }

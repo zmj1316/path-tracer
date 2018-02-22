@@ -2,6 +2,7 @@
 #include "ray_tracer.hpp"
 #include "structs.hpp"
 #include <algorithm>    // std::sort
+#include <random>
 
 
 RayTracer::RayTracer(): pd3dImmediateContext_(nullptr)
@@ -113,9 +114,9 @@ void RayTracer::createBuffers()
 
 	{
 		CB_RT cbrt;
-		D3DXMatrixIdentity(&cbrt.invModel);
-		D3DXMatrixIdentity(&cbrt.invView);
-		cbrt.tanHalfFovY = 0.3;
+		//D3DXMatrixIdentity(&cbrt.invModel);
+		//D3DXMatrixIdentity(&cbrt.invView);
+		cbrt.tanHalfFovY = 0;
 		cbrt.viewportDims.x = 640;
 		cbrt.viewportDims.y = 480;
 		addCB(sizeof(CB_RT), 1, &cbrt);
@@ -131,13 +132,24 @@ void RayTracer::createBuffers()
 		addSRV(sizeof(PrimitiveRender), renderer_primitives.size(), renderer_primitives.data());
 		primitive_render_srv_index = shader_resource_views.size() - 1;
 	}
+
+	{
+		addTextureSRV(sizeof(uint32_t), 640, 480);
+		old_tex_index = textures_.size() - 1;
+		old_tex_srv_index = shader_resource_views.size() - 1;
+	}
 }
 
 void RayTracer::run(ID3D11DeviceContext* pd3dImmediateContext)
 {
 	pd3dImmediateContext_ = pd3dImmediateContext;
-	buildRadixTree();
-	buildBVH();
+	static bool has_built = false;
+	if(!has_built)
+	{
+		buildRadixTree();
+		buildBVH();
+		has_built = true;
+	}
 	trace();
 	finish();
 }
@@ -164,11 +176,34 @@ void RayTracer::trace()
 {
 	pd3dImmediateContext_->CSSetShader(compute_shaders_[ray_shader_index], nullptr, 0);
 	pd3dImmediateContext_->CSSetShaderResources(0, 1, &shader_resource_views[primitive_render_srv_index]);
+	pd3dImmediateContext_->CSSetShaderResources(1, 1, &shader_resource_views[old_tex_srv_index]);
+
 	pd3dImmediateContext_->CSSetUnorderedAccessViews(0, 1, &unordered_access_views[tree_uav_index], nullptr);
 	pd3dImmediateContext_->CSSetUnorderedAccessViews(1, 1, &unordered_access_views[output_tex_uav_index], nullptr);
+	static std::random_device rd;
+	static std::uniform_int_distribution<uint32_t> dist(0, 0xFFFFFFFF);
+
+	D3D11_MAPPED_SUBRESOURCE MappedResource;
+	pd3dImmediateContext_->Map(constant_buffers_[rt_cb_index], 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource);
+	CB_RT* data = (CB_RT*)MappedResource.pData;
+	data->viewportDims.x = 640;
+	data->viewportDims.y = 480;
+	data->framecount = frame_count;
+	data->tanHalfFovY = 0.1;
+
+	for (int i = 0; i < sizeof(data->offset); ++i)
+	{
+		data->offset[i] = dist(rd);
+	}
+	pd3dImmediateContext_->Unmap(constant_buffers_[rt_cb_index], 0);
+
 	pd3dImmediateContext_->CSSetConstantBuffers(0, 1, &constant_buffers_[radix_cb_index]);
 	pd3dImmediateContext_->CSSetConstantBuffers(1, 1, &constant_buffers_[rt_cb_index]);
-	pd3dImmediateContext_->Dispatch(640 / 16, 480 / 16 , 1);
+
+
+	pd3dImmediateContext_->Dispatch(640 / 8, 480 / 8 , 1);
+	frame_count++;
+
 }
 
 void RayTracer::finish()

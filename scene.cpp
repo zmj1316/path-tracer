@@ -275,6 +275,8 @@ void Scene::loadObj(const char* filename)
 			const int pg_index = mat_to_pg[current_material_id];
 			for (int i = 0; i < 3; ++i)
 			{
+				pos[i].v[0] = -pos[i].v[0];
+				normal[i].v[0] = -normal[i].v[0];
 				geo.indicess[pg_index].push_back(geo.vertices_pos.size());
 				geo.vertices_pos.push_back({pos[i]});
 				geo.vertices_xyzn.push_back({pos[i],normal[i]});

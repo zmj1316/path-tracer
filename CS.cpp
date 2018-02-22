@@ -21,8 +21,8 @@
 ShaderManager shader_manager_;
 BufferManager compute_buffer_manager_;
 int localBuffer[NUM_ELEMENTS];
-static bool ray = true;
-vec3 g_pos{0,5,20};
+static bool ray = false;
+vec3 g_pos{0,5,23};
 
 ID3D11RasterizerState* g_noculling_state;
 
@@ -46,6 +46,8 @@ Scene scene;
 CModelViewerCamera g_Camera; // A model viewing camera
 
 RayTracer ray_tracer;
+
+static bool save_file = false;
 
 static void initScene()
 {
@@ -83,7 +85,7 @@ HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFAC
 {
 	initScene();
 	ImGui_ImplDX11_Init(DXUTGetHWNDDeviceWindowed(), pd3dDevice, DXUTGetD3D11DeviceContext());
-
+	
 	HRESULT hr;
 	{
 		shader_manager_.CreatePipelineShaders();
@@ -199,7 +201,6 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		ID3D11Query* pEventQuery;
 		pd3dDevice->CreateQuery(&pQueryDesc, &pEventQuery);
 
-
 		D3D11_MAPPED_SUBRESOURCE MappedResource;
 		V(pd3dImmediateContext->Map(ray_tracer.constant_buffers_[0], 0, D3D11_MAP_WRITE_DISCARD, 0, &
 			MappedResource));
@@ -208,17 +209,41 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		cb_vs_per_frame->node_count = ray_tracer.primitive_count;
 		pd3dImmediateContext->Unmap(ray_tracer.constant_buffers_[0], 0);
 
+		for (int i = 0; i < min(ImGui::GetIO().Framerate / 4,5); ++i)
+		{
+			ray_tracer.run(pd3dImmediateContext);
+			pd3dImmediateContext->CopyResource(ray_tracer.textures_[1], ray_tracer.textures_[0]);
+			if (ImGui::GetIO().KeysDown['P'])
+			{
+				save_file = true;
+				break;
+			}
 
-		ray_tracer.run(pd3dImmediateContext);
+			if (ImGui::GetIO().KeysDown['Z'])
+			{
+				ray = false;
+				break;
+			}
+		}
+
 		pd3dImmediateContext->End(pEventQuery);
 		pEventQuery->Release();
 
-		ID3D11Resource* r;
-		pRTV->GetResource(&r);
-		pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[0]);
-		SAFE_RELEASE(r);
 	}
 
+
+	ID3D11Resource* r;
+	pRTV->GetResource(&r);
+	pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[0]);
+	SAFE_RELEASE(r);
+
+	if(save_file)
+	{
+		wchar_t tmp[255];
+		wsprintf(tmp, L"frame_%d.bmp", ray_tracer.frame_count);
+		D3DX11SaveTextureToFile(pd3dImmediateContext, ray_tracer.textures_[1], D3DX11_IFF_BMP, tmp);
+		save_file = false;
+	}
 
 	if (!ray)
 	{
@@ -278,10 +303,15 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 	{
 		static float f = 0.0f;
 		ImGui::Checkbox("Ray?", &ray);
-		ImGui::Text("Hello, world!");
-		ImGui::SliderFloat("float", &f, 0.0f, 1.0f);
-		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
-		            ImGui::GetIO().Framerate);
+		ImGui::Text("Traced Frames: %d", ray_tracer.frame_count);
+		//ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
+		//            ImGui::GetIO().Framerate);
+		static bool acc = true;
+		ImGui::Checkbox("ACC?", &acc);
+		if(!acc)
+			ray_tracer.frame_count = 0;
+		if (ImGui::Button("save file"))
+			save_file = true;
 	}
 	ImGui::Render();
 }

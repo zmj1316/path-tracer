@@ -159,6 +159,16 @@ static bool CreateTextureUAV(ID3D11Device* pDevice, ID3D11Texture2D* pBuffer, ID
 	return pDevice->CreateUnorderedAccessView((ID3D11Resource*)pBuffer, &desc, ppUAVOut) >= 0;
 }
 
+static bool CreateTextureSRV(ID3D11Device* pDevice, ID3D11Texture2D* pBuffer, ID3D11ShaderResourceView** ppUAVOut)
+{
+	D3D11_SHADER_RESOURCE_VIEW_DESC desc;
+	ZeroMemory(&desc, sizeof(desc));
+	desc.ViewDimension = D3D_SRV_DIMENSION_TEXTURE2D;
+	desc.Texture2D.MipLevels = 1;
+
+	return pDevice->CreateShaderResourceView((ID3D11Resource*)pBuffer, &desc, ppUAVOut) >= 0;
+}
+
 void BufferManager::addSRV(uint32_t strip, uint32_t count, void* data)
 {
 	ID3D11Buffer* buffer;
@@ -201,6 +211,17 @@ void BufferManager::addTextureUAV(uint32_t strip, uint32_t width, uint32_t heigh
 	ID3D11UnorderedAccessView* srv;
 	CreateTextureUAV(DXUTGetD3D11Device(), buffer, &srv);
 	unordered_access_views.emplace_back(srv);
+}
+
+void BufferManager::addTextureSRV(uint32_t strip, uint32_t width, uint32_t height)
+{
+	ID3D11Texture2D* buffer;
+	CreateTextureBuffer(DXUTGetD3D11Device(), strip, width, height, &buffer);
+	textures_.emplace_back(buffer);
+
+	ID3D11ShaderResourceView* srv;
+	CreateTextureSRV(DXUTGetD3D11Device(), buffer, &srv);
+	shader_resource_views.emplace_back(srv);
 }
 
 void BufferManager::addCB(uint32_t strip, uint32_t count, void* data)

@@ -447,6 +447,7 @@
     <ClCompile Include="DXUT\Optional\DXUTsettingsdlg.cpp" />
     <ClCompile Include="DXUT\Optional\SDKmesh.cpp" />
     <ClCompile Include="DXUT\Optional\SDKmisc.cpp" />
+    <None Include="helpers.hlsli" />
     <None Include="structs.hlsli" />
   </ItemGroup>
   <ItemGroup>

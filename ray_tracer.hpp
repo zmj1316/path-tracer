@@ -8,7 +8,7 @@ class RayTracer : public ShaderManager, public BufferManager
 public:
 	RayTracer();
 	~RayTracer();
-
+	int frame_count = 0;
 	int primitive_count = 0;
 
 	int radix_build_shader_index = -1;
@@ -24,6 +24,9 @@ public:
 	int primitive_render_srv_index = -1;
 	int output_tex_uav_index = -1;
 	int rt_cb_index = -1;
+
+	int old_tex_index = -1;
+	int old_tex_srv_index = -1;
 
 	const LPCWSTR RADIX_SHADER_NAME = L"radix_build_cs.hlsl";
 	const LPCWSTR BVH_SHADER_NAME = L"bvh_build_cs.hlsl";
