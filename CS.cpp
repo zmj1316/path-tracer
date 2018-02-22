@@ -215,7 +215,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		{
 			ray_tracer.run(pd3dImmediateContext);
 			pd3dImmediateContext->CopyResource(ray_tracer.textures_[ray_tracer.old_tex_index], ray_tracer.textures_[ray_tracer.output_tex_index]);
-			if (ImGui::GetIO().KeysDown['P'])
+			if (ImGui::GetIO().KeysDown['P'] || (ray_tracer.frame_count&0x1FF) == 0)
 			{
 				save_file = true;
 				break;

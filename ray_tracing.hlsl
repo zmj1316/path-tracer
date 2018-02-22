@@ -219,7 +219,7 @@ bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out
 	return intersected;
 }
 
-#define MAX_ITR 5
+#define MAX_ITR 4
 float3 tracing(Ray ray, int2 rand2) {
 	int primitive_index;
 	float3 barycentrics;

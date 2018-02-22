@@ -159,6 +159,7 @@ void RayTracer::resize(int width, int height)
 {
 	this->width = width;
 	this->height = height;
+	frame_count = 0;
 	if(output_tex_index >= 0 && old_tex_index >= 0)
 	{
 		SAFE_RELEASE(unordered_access_views[output_tex_uav_index]);
