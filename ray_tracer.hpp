@@ -37,12 +37,14 @@ public:
 	std::vector<PrimitiveRender> renderer_primitives;
 	std::vector<PrimitiveRay> ray_primitives;
 	std::vector<PrimitiveRayCS> ray_cs_primitives;
+	int output_tex_index = -1;
 
 	void loadScene();
 	void loadShaders();
 	void createBuffers();
 	ID3D11DeviceContext* pd3dImmediateContext_;
 	void RayTracer::run(ID3D11DeviceContext* pd3dImmediateContext);
+	void resize(int width, int height);
 
 	void buildRadixTree();
 	void buildBVH();
@@ -51,5 +53,8 @@ public:
 	void finish();
 
 	void release();
+
+	int width = 640;
+	int height = 480;
 };
 

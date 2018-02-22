@@ -22,7 +22,7 @@ ShaderManager shader_manager_;
 BufferManager compute_buffer_manager_;
 int localBuffer[NUM_ELEMENTS];
 static bool ray = false;
-vec3 g_pos{0,5,23};
+vec3 g_pos{0,5,25};
 
 ID3D11RasterizerState* g_noculling_state;
 
@@ -136,6 +136,8 @@ HRESULT CALLBACK OnD3D11ResizedSwapChain(ID3D11Device* pd3dDevice, IDXGISwapChai
 	float fAspectRatio = pBackBufferSurfaceDesc->Width / (FLOAT)pBackBufferSurfaceDesc->Height;
 	g_Camera.SetProjParams(D3DX_PI / 6, fAspectRatio, 0.005f, 100.0f);
 	g_Camera.SetWindow(pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height);
+
+	ray_tracer.resize(pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height);
 	return S_OK;
 }
 
@@ -212,7 +214,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		for (int i = 0; i < min(ImGui::GetIO().Framerate / 4,5); ++i)
 		{
 			ray_tracer.run(pd3dImmediateContext);
-			pd3dImmediateContext->CopyResource(ray_tracer.textures_[1], ray_tracer.textures_[0]);
+			pd3dImmediateContext->CopyResource(ray_tracer.textures_[ray_tracer.old_tex_index], ray_tracer.textures_[ray_tracer.output_tex_index]);
 			if (ImGui::GetIO().KeysDown['P'])
 			{
 				save_file = true;
@@ -234,14 +236,14 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 
 	ID3D11Resource* r;
 	pRTV->GetResource(&r);
-	pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[0]);
+	pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[ray_tracer.output_tex_index]);
 	SAFE_RELEASE(r);
 
 	if(save_file)
 	{
 		wchar_t tmp[255];
 		wsprintf(tmp, L"frame_%d.bmp", ray_tracer.frame_count);
-		D3DX11SaveTextureToFile(pd3dImmediateContext, ray_tracer.textures_[1], D3DX11_IFF_BMP, tmp);
+		D3DX11SaveTextureToFile(pd3dImmediateContext, ray_tracer.textures_[ray_tracer.old_tex_index], D3DX11_IFF_BMP, tmp);
 		save_file = false;
 	}
 

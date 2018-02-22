@@ -117,14 +117,15 @@ void RayTracer::createBuffers()
 		//D3DXMatrixIdentity(&cbrt.invModel);
 		//D3DXMatrixIdentity(&cbrt.invView);
 		cbrt.tanHalfFovY = 0;
-		cbrt.viewportDims.x = 640;
-		cbrt.viewportDims.y = 480;
+		cbrt.viewportDims.x = width;
+		cbrt.viewportDims.y = height;
 		addCB(sizeof(CB_RT), 1, &cbrt);
 		rt_cb_index = constant_buffers_.size() - 1;
 	}
 
 	{
-		addTextureUAV(sizeof(uint32_t), 640, 480);
+		addTextureUAV(sizeof(uint32_t), width, height);
+		output_tex_index = textures_.size() - 1;
 		output_tex_uav_index = unordered_access_views.size() - 1;
 	}
 
@@ -134,7 +135,7 @@ void RayTracer::createBuffers()
 	}
 
 	{
-		addTextureSRV(sizeof(uint32_t), 640, 480);
+		addTextureSRV(sizeof(uint32_t), width, height);
 		old_tex_index = textures_.size() - 1;
 		old_tex_srv_index = shader_resource_views.size() - 1;
 	}
@@ -152,6 +153,29 @@ void RayTracer::run(ID3D11DeviceContext* pd3dImmediateContext)
 	}
 	trace();
 	finish();
+}
+
+void RayTracer::resize(int width, int height)
+{
+	this->width = width;
+	this->height = height;
+	if(output_tex_index >= 0 && old_tex_index >= 0)
+	{
+		SAFE_RELEASE(unordered_access_views[output_tex_uav_index]);
+		SAFE_RELEASE(shader_resource_views[old_tex_srv_index]);
+		SAFE_RELEASE(textures_[output_tex_index]);
+		SAFE_RELEASE(textures_[old_tex_index]);
+	}
+	{
+		addTextureUAV(sizeof(uint32_t), width, height);
+		output_tex_index = textures_.size() - 1;
+		output_tex_uav_index = unordered_access_views.size() - 1;
+	}
+	{
+		addTextureSRV(sizeof(uint32_t), width, height);
+		old_tex_index = textures_.size() - 1;
+		old_tex_srv_index = shader_resource_views.size() - 1;
+	}
 }
 
 void RayTracer::buildRadixTree()
@@ -186,8 +210,8 @@ void RayTracer::trace()
 	D3D11_MAPPED_SUBRESOURCE MappedResource;
 	pd3dImmediateContext_->Map(constant_buffers_[rt_cb_index], 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource);
 	CB_RT* data = (CB_RT*)MappedResource.pData;
-	data->viewportDims.x = 640;
-	data->viewportDims.y = 480;
+	data->viewportDims.x = width;
+	data->viewportDims.y = height;
 	data->framecount = frame_count;
 	data->tanHalfFovY = 0.1;
 
@@ -201,9 +225,8 @@ void RayTracer::trace()
 	pd3dImmediateContext_->CSSetConstantBuffers(1, 1, &constant_buffers_[rt_cb_index]);
 
 
-	pd3dImmediateContext_->Dispatch(640 / 8, 480 / 8 , 1);
+	pd3dImmediateContext_->Dispatch(width / 8, height / 8 , 1);
 	frame_count++;
-
 }
 
 void RayTracer::finish()

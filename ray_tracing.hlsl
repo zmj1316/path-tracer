@@ -18,7 +18,7 @@ cbuffer RTCB : register(b1)
 	float2 viewportDims;
 	float tanHalfFovY;
 	uint framecount;
-	int g_tid_offset[16];
+	int4 g_tid_offset;
 };
 
 
@@ -224,7 +224,7 @@ float3 tracing(Ray ray, int2 rand2) {
 	int primitive_index;
 	float3 barycentrics;
 	float t;
-	uint seed = rand_init(rand2.x + framecount,rand2.y + g_tid_offset[rand2.x&15]);
+	uint seed = rand_init(rand2.x + framecount,rand2.y + g_tid_offset[rand2.x&3]);
 	//uint seed = framecount;
 	Ray this_ray = ray;
 	float3 color = float3(0, 0, 0);
