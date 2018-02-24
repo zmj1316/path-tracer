@@ -260,7 +260,6 @@ float3 tracing(Ray ray, int2 rand2) {
 
 			this_ray.origin = hitPoint;
 			if (id == 0) {
-				if (itr > 2) continue;
 				float cos = dot(normal, this_ray.direction);
 
 				float nc = 1.f;
@@ -272,7 +271,8 @@ float3 tracing(Ray ray, int2 rand2) {
 				float cos2t = 1.f - nnt * nnt * (1.f - ddn * ddn);
 
 				if (cos2t < 0.0f) {
-					this_ray.direction = reflect(this_ray.direction, -normal);
+					this_ray.direction = reflect(this_ray.direction, normal);
+					//this_ray.direction = -2 * dot(this_ray.direction, normal) * normal + this_ray.direction;
 					continue;
 				}
 
