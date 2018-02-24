@@ -219,7 +219,7 @@ bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out
 	return intersected;
 }
 
-#define MAX_ITR 4
+#define MAX_ITR 5
 float3 tracing(Ray ray, int2 rand2) {
 	int primitive_index;
 	float3 barycentrics;
@@ -234,8 +234,6 @@ float3 tracing(Ray ray, int2 rand2) {
 	[allow_uav_condition]
 	while (intersect(this_ray, primitive_index, barycentrics, t)) {
 		int id = primitives[primitive_index].matid;
-		seed += t * barycentrics.x;
-		seed += id;
 
 		if (itr >= MAX_ITR) {
 			break;
@@ -246,9 +244,10 @@ float3 tracing(Ray ray, int2 rand2) {
 			//	break;
 			//}
 		}
+		itr++;
 
 		if ( id == 1) {
-			color += multi * float3(10, 10, 10);
+			color += multi * float3(20, 20, 20);
 			break;
 		}
 		else{
@@ -261,16 +260,49 @@ float3 tracing(Ray ray, int2 rand2) {
 
 			this_ray.origin = hitPoint;
 			if (id == 0) {
-				float cos = -dot(this_ray.direction, normal);
-				float n = 1 / 1.5;
-				float cost2 = 1 - n*n*(1 - cos*cos);
-				if (cost2 > 0.0f)
-				{
-					this_ray.direction = normalize((n * this_ray.direction) - (n * cos + sqrt(cost2)) * normal);
+				if (itr > 2) continue;
+				float cos = dot(normal, this_ray.direction);
+
+				float nc = 1.f;
+				float nt = 1.5f;
+				float nnt = nc / nt;
+				if (cos > 0)
+					nnt = nt / nc;
+				float ddn = abs(cos);
+				float cos2t = 1.f - nnt * nnt * (1.f - ddn * ddn);
+
+				if (cos2t < 0.0f) {
+					this_ray.direction = reflect(this_ray.direction, -normal);
+					continue;
+				}
+
+				if (cos < 0) {
+					this_ray.direction = normalize(nnt * this_ray.direction - (cos * nnt + sqrt(cos2t)) * normal);
 				}
 				else {
-					n = 1 / n;
-					this_ray.direction = normalize((n * this_ray.direction) - (n * cos + sqrt(cost2)) * normal);
+					this_ray.direction = normalize(nnt * this_ray.direction + (-cos * nnt + sqrt(cos2t)) * normal);
+				}
+
+					 
+				float a = nt - nc;
+				float b = nt + nc;
+				float R0 = a * a / (b * b);
+				float c = 1 - ddn;
+
+				float Re = R0 + (1 - R0) * c * c * c * c*c;
+				float Tr = 1.f - Re;
+				float P = .25f + .5f * Re;
+				float RP = Re / P;
+				float TP = Tr / (1.f - P);
+
+				if (rand_next(seed) < P) { /* R.R. */
+					multi *= RP;
+					this_ray.direction = reflect(this_ray.direction, normal);
+					continue;
+				}
+				else {
+					multi *= TP;
+					continue;
 				}
 			}
 			else if (id == 6) {
@@ -299,7 +331,6 @@ float3 tracing(Ray ray, int2 rand2) {
 				this_ray.direction = normalize(u*cos(r1)*r2s + v * sin(r1)*r2s + w * sqrt(1 - r2));
 			}
 		}
-		itr++;
 	}
 	return color;
 }
@@ -332,8 +363,8 @@ void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 	Ray ray;
 	ray.origin = g_pos;
 	float3 pixel = g_pos + float3(0, 0, -1);
-	pixel.x += -d.x * aspectRatio * 0.25 + r1;
-	pixel.y += -d.y * 0.25 + r2;
+	pixel.x += -d.x * aspectRatio * 0.4 + r1;
+	pixel.y += -d.y * 0.4 + r2;
 	//ray.direction = normalize((d.x * transInvView[0].xyz * 0.3 * aspectRatio) + (d.y * transInvView[1].xyz * 0.3) + transInvView[2].xyz);
 	ray.direction = normalize(pixel - ray.origin);
 	ray.t_min = 0;
@@ -358,6 +389,7 @@ void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 	//	sampleid.y--;
 	//else if (r4 > 0.975)
 	//	sampleid.y++;
+	//this_color = pow(this_color, 1.2);
 	output[launchIndex.xy] = (old_texture[sampleid/* + float2((rand_next(seed)) / 2, (rand_next(seed)) / 2)*/] * framecount + this_color) / (framecount + 1);
 	//output[launchIndex.xy] = float4(tanHalfFovY,0,0,1);
 }
