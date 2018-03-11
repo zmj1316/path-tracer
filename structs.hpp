@@ -63,7 +63,8 @@ struct CB_RT
 	D3DXVECTOR2 viewportDims;
 	float tanHalfFovY = 0;
 	int framecount;
-	int offset[16] = {0};
+	int offset[4] = { 0 };
+	int random[4] = { 0 };
 };
 
 constexpr int MORTON_CODE_LENGTH_EACH = 21;

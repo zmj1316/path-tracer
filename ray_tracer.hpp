@@ -2,6 +2,7 @@
 #include "shader_manager.hpp"
 #include "buffer_manager.hpp"
 #include "scene.hpp"
+#include <unordered_map>
 
 class RayTracer : public ShaderManager, public BufferManager
 {
@@ -27,6 +28,9 @@ public:
 
 	int old_tex_index = -1;
 	int old_tex_srv_index = -1;
+
+	int halton_tex_index = -1;
+	int halton_tex_srv_index = -1;
 
 	const LPCWSTR RADIX_SHADER_NAME = L"radix_build_cs.hlsl";
 	const LPCWSTR BVH_SHADER_NAME = L"bvh_build_cs.hlsl";
@@ -56,5 +60,6 @@ public:
 
 	int width = 640;
 	int height = 480;
+	std::unordered_map<std::string, std::string> shader_define_values;
 };
 

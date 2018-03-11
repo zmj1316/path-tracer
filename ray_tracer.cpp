@@ -3,6 +3,7 @@
 #include "structs.hpp"
 #include <algorithm>    // std::sort
 #include <random>
+#include "halton_helper.hpp"
 
 
 RayTracer::RayTracer(): pd3dImmediateContext_(nullptr)
@@ -64,19 +65,25 @@ void RayTracer::loadScene()
 	{
 		ray_cs_primitives.push_back({ray_primitive.bound,ray_primitive.index});
 	}
+
+	shader_define_values["MAT_COUNT"] = std::to_string(scene.materials_.size());
+	shader_define_values["MAT_ITR"] = "5";
 }
 
 void RayTracer::loadShaders()
 {
-	if (CreateCS(RADIX_SHADER_NAME, "CSMain"))
+	const D3D10_SHADER_MACRO defines[] = {
+		"MAX_ITR","1",nullptr,nullptr
+	};
+	if (CreateCS(RADIX_SHADER_NAME, "CSMain", defines))
 	{
 		radix_build_shader_index = compute_shaders_.size() - 1;
 	}
-	if (CreateCS(BVH_SHADER_NAME, "CSMain"))
+	if (CreateCS(BVH_SHADER_NAME, "CSMain", defines))
 	{
 		bvh_build_shader_index = compute_shaders_.size() - 1;
 	}
-	if (CreateCS(RAY_SHADER_NAME, "CSMain"))
+	if (CreateCS(RAY_SHADER_NAME, "CSMain", defines))
 	{
 		ray_shader_index = compute_shaders_.size() - 1;
 	}
@@ -139,6 +146,17 @@ void RayTracer::createBuffers()
 		old_tex_index = textures_.size() - 1;
 		old_tex_srv_index = shader_resource_views.size() - 1;
 	}
+	//{
+	//	addTextureSRVWritable(sizeof(uint32_t), 256, 256);
+	//	halton_tex_index = textures_.size() - 1;
+	//	halton_tex_srv_index = shader_resource_views.size() - 1;
+
+	//	D3D11_MAPPED_SUBRESOURCE MappedResource;
+	//	DXUTGetD3D11DeviceContext()->Map(textures_[halton_tex_index], 0, D3D11_MAP_WRITE_DISCARD, 0, &
+	//		MappedResource);
+	//	memcpy(MappedResource.pData, createHaltonTexture().data(), sizeof(uint32_t) * 256 * 256);
+	//	DXUTGetD3D11DeviceContext()->Unmap(textures_[halton_tex_index], 0);
+	//}
 }
 
 void RayTracer::run(ID3D11DeviceContext* pd3dImmediateContext)
@@ -177,6 +195,7 @@ void RayTracer::resize(int width, int height)
 		old_tex_index = textures_.size() - 1;
 		old_tex_srv_index = shader_resource_views.size() - 1;
 	}
+
 }
 
 void RayTracer::buildRadixTree()
@@ -202,6 +221,7 @@ void RayTracer::trace()
 	pd3dImmediateContext_->CSSetShader(compute_shaders_[ray_shader_index], nullptr, 0);
 	pd3dImmediateContext_->CSSetShaderResources(0, 1, &shader_resource_views[primitive_render_srv_index]);
 	pd3dImmediateContext_->CSSetShaderResources(1, 1, &shader_resource_views[old_tex_srv_index]);
+	//pd3dImmediateContext_->CSSetShaderResources(2, 1, &shader_resource_views[halton_tex_srv_index]);
 
 	pd3dImmediateContext_->CSSetUnorderedAccessViews(0, 1, &unordered_access_views[tree_uav_index], nullptr);
 	pd3dImmediateContext_->CSSetUnorderedAccessViews(1, 1, &unordered_access_views[output_tex_uav_index], nullptr);
@@ -209,25 +229,45 @@ void RayTracer::trace()
 	static std::uniform_int_distribution<uint32_t> dist(0, 0xFFFFFFFF);
 
 	D3D11_MAPPED_SUBRESOURCE MappedResource;
-	pd3dImmediateContext_->Map(constant_buffers_[rt_cb_index], 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource);
-	CB_RT* data = (CB_RT*)MappedResource.pData;
-	data->viewportDims.x = width;
-	data->viewportDims.y = height;
-	data->framecount = frame_count;
-	data->tanHalfFovY = 0.1;
 
-	for (int i = 0; i < sizeof(data->offset); ++i)
+#define TILEX 1
+#define TILEY 1
+#define INT_FRAM 1
+#define PATCHZ 1
+
+	for (int w = 0; w < width; w += width / TILEX)
 	{
-		data->offset[i] = dist(rd);
+		for (int h = 0; h < height; h += height / TILEY)
+		{
+			for (int internal_fram = 0; internal_fram < INT_FRAM; ++internal_fram)
+			{
+				pd3dImmediateContext_->Map(constant_buffers_[rt_cb_index], 0, D3D11_MAP_WRITE_DISCARD, 0, &MappedResource);
+				CB_RT* data = (CB_RT*)MappedResource.pData;
+				data->viewportDims.x = width;
+				data->viewportDims.y = height;
+				data->framecount = frame_count + internal_fram;
+				data->tanHalfFovY = 0.1;
+
+				for (int i = 0; i < sizeof(data->random); ++i)
+				{
+					data->random[i] = dist(rd);
+				}
+				data->offset[0] = w;
+				data->offset[1] = h;
+				data->offset[2] = w + width / TILEX - 1;
+				data->offset[3] = h + height / TILEY - 1;
+				pd3dImmediateContext_->Unmap(constant_buffers_[rt_cb_index], 0);
+
+				pd3dImmediateContext_->CSSetConstantBuffers(0, 1, &constant_buffers_[radix_cb_index]);
+				pd3dImmediateContext_->CSSetConstantBuffers(1, 1, &constant_buffers_[rt_cb_index]);
+
+				pd3dImmediateContext_->Dispatch((width / TILEX - 1) / 8 + 1, (height / TILEY - 1) / 8 + 1, PATCHZ);
+				pd3dImmediateContext_->CopyResource(textures_[old_tex_index], textures_[output_tex_index]);
+			}
+		}
 	}
-	pd3dImmediateContext_->Unmap(constant_buffers_[rt_cb_index], 0);
 
-	pd3dImmediateContext_->CSSetConstantBuffers(0, 1, &constant_buffers_[radix_cb_index]);
-	pd3dImmediateContext_->CSSetConstantBuffers(1, 1, &constant_buffers_[rt_cb_index]);
-
-
-	pd3dImmediateContext_->Dispatch(width / 8, height / 8 , 1);
-	frame_count++;
+	frame_count+= INT_FRAM * PATCHZ;
 }
 
 void RayTracer::finish()

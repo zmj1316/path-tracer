@@ -7,7 +7,7 @@ public:
 	ShaderManager();
 	~ShaderManager();
 
-	bool ShaderManager::CreateCS(LPCWSTR pSrcFile, LPCSTR pFunctionName);
+	bool ShaderManager::CreateCS(LPCWSTR pSrcFile, LPCSTR pFunctionName, const D3D10_SHADER_MACRO* defines);
 
 	void CreatePipelineShaders();
 	std::vector<ID3D11ComputeShader *> compute_shaders_;

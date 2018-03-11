@@ -78,6 +78,7 @@
     </ClCompile>
     <None Include="structs.hlsli" />
     <None Include="helpers.hlsli" />
+    <None Include="Halton.hlsli" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="imgui\imgui_draw.cpp">
@@ -124,6 +125,7 @@
     <ClInclude Include="math3d.h" />
     <ClInclude Include="structs.hpp" />
     <ClInclude Include="ray_tracer.hpp" />
+    <ClInclude Include="halton_helper.hpp" />
   </ItemGroup>
   <ItemGroup>
     <CLInclude Include="resource.h">

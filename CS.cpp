@@ -22,7 +22,7 @@ ShaderManager shader_manager_;
 BufferManager compute_buffer_manager_;
 int localBuffer[NUM_ELEMENTS];
 static bool ray = false;
-vec3 g_pos{0,5,25};
+vec3 g_pos{0,5,17};
 
 ID3D11RasterizerState* g_noculling_state;
 
@@ -48,6 +48,7 @@ CModelViewerCamera g_Camera; // A model viewing camera
 RayTracer ray_tracer;
 
 static bool save_file = false;
+static bool kk_mode = true;
 
 static void initScene()
 {
@@ -55,6 +56,8 @@ static void initScene()
 	ray_tracer.loadScene();
 	ray_tracer.loadShaders();
 	ray_tracer.createBuffers();
+	if (kk_mode)
+		ray_tracer.resize(1024, 1024);
 }
 
 //--------------------------------------------------------------------------------------
@@ -85,7 +88,7 @@ HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFAC
 {
 	initScene();
 	ImGui_ImplDX11_Init(DXUTGetHWNDDeviceWindowed(), pd3dDevice, DXUTGetD3D11DeviceContext());
-	
+
 	HRESULT hr;
 	{
 		shader_manager_.CreatePipelineShaders();
@@ -137,7 +140,8 @@ HRESULT CALLBACK OnD3D11ResizedSwapChain(ID3D11Device* pd3dDevice, IDXGISwapChai
 	g_Camera.SetProjParams(D3DX_PI / 6, fAspectRatio, 0.005f, 100.0f);
 	g_Camera.SetWindow(pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height);
 
-	ray_tracer.resize(pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height);
+	if (!kk_mode)
+		ray_tracer.resize(pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height);
 	return S_OK;
 }
 
@@ -211,14 +215,35 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		cb_vs_per_frame->node_count = ray_tracer.primitive_count;
 		pd3dImmediateContext->Unmap(ray_tracer.constant_buffers_[0], 0);
 
-		for (int i = 0; i < min(ImGui::GetIO().Framerate / 4,5); ++i)
+		//for (int i = 0; i < min(ImGui::GetIO().Framerate / 4,1); ++i)
+		do
 		{
 			ray_tracer.run(pd3dImmediateContext);
-			pd3dImmediateContext->CopyResource(ray_tracer.textures_[ray_tracer.old_tex_index], ray_tracer.textures_[ray_tracer.output_tex_index]);
-			if (ImGui::GetIO().KeysDown['P'] || (ray_tracer.frame_count&0x1FF) == 0)
+			//pd3dImmediateContext->CopyResource(ray_tracer.textures_[ray_tracer.old_tex_index], ray_tracer.textures_[ray_tracer.output_tex_index]);
+			if (ImGui::GetIO().KeysDown['P'] ||
+				(ray_tracer.frame_count == 50) ||
+				(ray_tracer.frame_count == 100) ||
+				(ray_tracer.frame_count == 200) ||
+				(ray_tracer.frame_count == 500) ||
+				(ray_tracer.frame_count == 1000) ||
+				(ray_tracer.frame_count == 1500) ||
+				(ray_tracer.frame_count == 2000) ||
+				(ray_tracer.frame_count == 3000) ||
+				(ray_tracer.frame_count == 5000) ||
+				(ray_tracer.frame_count == 8000) ||
+				(ray_tracer.frame_count == 10000) ||
+				(ray_tracer.frame_count == 12000) ||
+				(ray_tracer.frame_count == 16000) ||
+				(ray_tracer.frame_count == 20000)
+			)
 			{
 				save_file = true;
 				break;
+			}
+
+			if (ray_tracer.frame_count > 20002)
+			{
+				exit(0);
 			}
 
 			if (ImGui::GetIO().KeysDown['Z'])
@@ -227,22 +252,25 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 				break;
 			}
 		}
+		while (false);
 
 		pd3dImmediateContext->End(pEventQuery);
 		pEventQuery->Release();
-
+		//Sleep(700);
 	}
 
+	if (!kk_mode)
+	{
+		ID3D11Resource* r;
+		pRTV->GetResource(&r);
+		pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[ray_tracer.output_tex_index]);
+		SAFE_RELEASE(r);
+	}
 
-	ID3D11Resource* r;
-	pRTV->GetResource(&r);
-	pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[ray_tracer.output_tex_index]);
-	SAFE_RELEASE(r);
-
-	if(save_file)
+	if (save_file)
 	{
 		wchar_t tmp[255];
-		wsprintf(tmp, L"frame_%d.bmp", ray_tracer.frame_count);
+		wsprintf(tmp, L"%dX%dframe_%d.bmp", ray_tracer.width, ray_tracer.height, ray_tracer.frame_count);
 		D3DX11SaveTextureToFile(pd3dImmediateContext, ray_tracer.textures_[ray_tracer.old_tex_index], D3DX11_IFF_BMP, tmp);
 		save_file = false;
 	}
@@ -306,11 +334,11 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		static float f = 0.0f;
 		ImGui::Checkbox("Ray?", &ray);
 		ImGui::Text("Traced Frames: %d", ray_tracer.frame_count);
-		//ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
-		//            ImGui::GetIO().Framerate);
+		ImGui::Text("Application average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate,
+		            ImGui::GetIO().Framerate);
 		static bool acc = true;
 		ImGui::Checkbox("ACC?", &acc);
-		if(!acc)
+		if (!acc)
 			ray_tracer.frame_count = 0;
 		if (ImGui::Button("save file"))
 			save_file = true;

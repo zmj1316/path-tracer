@@ -1,8 +1,6 @@
 #include "DXUT.h"
 #include "shader_manager.hpp"
-
 #include <stdio.h>
-
 #include <d3d11.h>
 #include <d3dcompiler.h>
 #include <cstdint>
@@ -22,7 +20,8 @@ ShaderManager::~ShaderManager()
 
 HRESULT CompileComputeShader(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
                                   _In_                                  ID3D11Device* device,
-                                  _Outptr_ ID3D10Blob** blob)
+                                  _Outptr_ ID3D10Blob** blob,
+	const D3D10_SHADER_MACRO *defines)
 {
 	if (!srcFile || !entryPoint || !device || !blob)
 		return E_INVALIDARG;
@@ -37,11 +36,11 @@ HRESULT CompileComputeShader(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
 	// We generally prefer to use the higher CS shader profile when possible as CS 5.0 is better performance on 11-class hardware
 	LPCSTR profile = (device->GetFeatureLevel() >= D3D_FEATURE_LEVEL_11_0) ? "cs_5_0" : "cs_4_0";
 
-	const D3D10_SHADER_MACRO defines[] =
-	{
-		"EXAMPLE_DEFINE", "1",
-		nullptr, nullptr
-	};
+	//const D3D10_SHADER_MACRO defines[] =
+	//{
+	//	"MAX_ITR", "1",
+	//	nullptr, nullptr
+	//};
 
 	ID3D10Blob* shaderBlob = nullptr;
 	ID3D10Blob* errorBlob = nullptr;
@@ -69,7 +68,7 @@ HRESULT CompileComputeShader(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
 }
 
 static bool CreateComputeShader(LPCWSTR pSrcFile, LPCSTR pFunctionName,
-                                ID3D11Device* pDevice, ID3D11ComputeShader** ppShaderOut)
+                                ID3D11Device* pDevice, ID3D11ComputeShader** ppShaderOut, const D3D10_SHADER_MACRO *defines_)
 {
 	uint32_t dwShaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
 
@@ -81,7 +80,7 @@ static bool CreateComputeShader(LPCWSTR pSrcFile, LPCSTR pFunctionName,
 
 	const D3D_SHADER_MACRO defines[] =
 	{
-		"USE_STRUCTURED_BUFFERS", "1",
+		"MAX_ITR", "5",
 		nullptr, nullptr
 	};
 
@@ -203,10 +202,10 @@ static bool CreatePixelShader(LPCWSTR pSrcFile, LPCSTR pFunctionName, LPCSTR pPr
 	return result;
 }
 
-bool ShaderManager::CreateCS(LPCWSTR pSrcFile, LPCSTR pFunctionName)
+bool ShaderManager::CreateCS(LPCWSTR pSrcFile, LPCSTR pFunctionName, const D3D10_SHADER_MACRO *defines)
 {
 	ID3D11ComputeShader * shader;
-	if (CreateComputeShader(pSrcFile, pFunctionName, DXUTGetD3D11Device(), &shader))
+	if (CreateComputeShader(pSrcFile, pFunctionName, DXUTGetD3D11Device(), &shader, defines))
 	{
 		compute_shaders_.push_back(shader);
 		return true;

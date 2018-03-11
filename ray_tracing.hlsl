@@ -1,11 +1,16 @@
 #include "structs.hlsli"
 #include "helpers.hlsli"
 
+// The below texture contains faure permutations, stored in an integer texture:
+
 StructuredBuffer<PrimitiveRender> primitives : register(t0);
 Texture2D<unorm float4> old_texture : register(t1);
 
 RWStructuredBuffer<TreeNode> tree : register(u0);
 RWTexture2D<unorm float4> output : register(u1);
+
+Texture2D<uint> gHaltonTexture : register(t2);
+#include "Halton.hlsli"
 
 // 对应于主机端的constant buffer  
 cbuffer RadixCB : register(b0)
@@ -19,13 +24,14 @@ cbuffer RTCB : register(b1)
 	float tanHalfFovY;
 	uint framecount;
 	int4 g_tid_offset;
+	int4 g_random;
 };
 
 
 #define STACK_SIZE 4000
 #define kEpsilon 1e-4
 
-bool intersection_bound(Ray ray, Bound bound ,out float tout) {
+bool intersection_bound(Ray ray, Bound bound ,float current_t ,out float tout) {
 	float t_min, t_max, t_xmin, t_xmax, t_ymin, t_ymax, t_zmin, t_zmax;
 	float x_a = 1.0 / ray.direction.x, y_a = 1.0 / ray.direction.y, z_a = 1.0 / ray.direction.z;
 	float  x_e = ray.origin.x, y_e = ray.origin.y, z_e = ray.origin.z;
@@ -64,8 +70,7 @@ bool intersection_bound(Ray ray, Bound bound ,out float tout) {
 	t_min = max(t_xmin, max(t_ymin, t_zmin));
 	t_max = min(t_xmax, min(t_ymax, t_zmax));
 	tout = t_min;
-	return (t_min <= t_max);
-
+	return (t_min <= t_max && t_min <= current_t);
 }
 
 bool calc_barycentrics(int index, Ray ray, out float t, out float3 barycentrics) {
@@ -162,24 +167,13 @@ bool calc_barycentrics3(int index, Ray ray, out float t, out float3 barycentrics
 
 	float3 s = (ray.origin - a) / a1;
 	float3 r = cross(s, e_1);
+	t = dot(e_2,r);
 	barycentrics.x = dot(s,q);
 	barycentrics.y = dot(r,ray.direction);
 	barycentrics.z = 1 - barycentrics.x - barycentrics.y;
-	t = dot(e_2,r);
 	if (barycentrics.x >= -kEpsilon && barycentrics.y >= -kEpsilon && barycentrics.z >= -kEpsilon)
 		return t >= kEpsilon;
 	return false;
-
-
-	//float d00 = Dot(v0, v0);
-	//float d01 = Dot(v0, v1);
-	//float d11 = Dot(v1, v1);
-	//float d20 = Dot(v2, v0);
-	//float d21 = Dot(v2, v1);
-	//float denom = d00 * d11 - d01 * d01;
-	//barycentrics.x = (d11 * d20 - d01 * d21) / denom;
-	//barycentrics.y = (d00 * d21 - d01 * d20) / denom;
-	//barycentrics.z = 1.0f - v - w;
 }
 
 bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out float current_t) {
@@ -194,7 +188,7 @@ bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out
 	while (stack_top != STACK_SIZE) {
 		int current = stack[stack_top++];
 		float t;
-		if (intersection_bound(ray, tree[current].bound, t)) {
+		if (intersection_bound(ray, tree[current].bound, current_t, t)) {
 			if (current >= node_count) {// leaf
 				float3 tmp;
 				if (calc_barycentrics3(tree[current].index, ray, t, tmp)) {
@@ -219,15 +213,15 @@ bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out
 	return intersected;
 }
 
+#ifndef MAX_ITR
 #define MAX_ITR 5
-float3 tracing(Ray ray, int2 rand2) {
+#endif
+
+float3 tracing(Ray ray, uint seed/*, HaltonState hState*/) {
 	int primitive_index;
 	float3 barycentrics;
 	float t;
-	uint seed = rand_init(rand2.x + framecount,rand2.y + g_tid_offset[rand2.x&3]);
-	//uint seed = framecount;
 	Ray this_ray = ray;
-	float3 color = float3(0, 0, 0);
 	int itr = 0;
 	float3 multi = float3(1,1,1);
 
@@ -237,17 +231,11 @@ float3 tracing(Ray ray, int2 rand2) {
 
 		if (itr >= MAX_ITR) {
 			break;
-			//if (rand_next(seed) < p) {
-			//	multi = multi * (1 / p);
-			//}
-			//else {
-			//	break;
-			//}
 		}
 		itr++;
 
 		if ( id == 1) {
-			color += multi * float3(20, 20, 20);
+			return multi * float3(8, 8, 8);
 			break;
 		}
 		else{
@@ -272,7 +260,6 @@ float3 tracing(Ray ray, int2 rand2) {
 
 				if (cos2t < 0.0f) {
 					this_ray.direction = reflect(this_ray.direction, normal);
-					//this_ray.direction = -2 * dot(this_ray.direction, normal) * normal + this_ray.direction;
 					continue;
 				}
 
@@ -315,8 +302,9 @@ float3 tracing(Ray ray, int2 rand2) {
 					multi *= float3(0.9, 0.1, 0.1);
 
 				//float r1 = 2 * MY_PI * ((1.0f * (framecount & 0x1F) / 0x1F) + rand_next(seed) / 0x20);
-				float r1 = 2 * MY_PI * ( rand_next(seed));
-				float r2 = rand_next(seed);
+				//this_ray.direction = -2 * dot(this_ray.direction, normal) * normal + this_ray.direction;
+				float r1 = 2 * MY_PI * ((framecount & 1) / 2.0 + rand_next(seed) / 2);
+				float r2 = (((framecount>>1) & 1) / 2.0 + rand_next(seed) / 2);
 				float r2s = sqrt(r2);
 				float3 w = normal;
 				float3 u;
@@ -332,7 +320,7 @@ float3 tracing(Ray ray, int2 rand2) {
 			}
 		}
 	}
-	return color;
+	return float3(0,0,0);
 }
 
 //color = primitives[primitive_index].vertices[0].pos * 0.1;
@@ -349,17 +337,22 @@ float3 tracing(Ray ray, int2 rand2) {
 [numthreads(8, 8, 1)]
 void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 {
-	//launchIndex.x += g_tid_offset[0];
-	//launchIndex.y += g_tid_offset[1];
+	launchIndex.x += g_tid_offset[0];
+	launchIndex.y += g_tid_offset[1];
+	//HaltonState hState;
+	//setupHalton(hState, launchIndex.x, launchIndex.y, 0, 1, framecount, 8);
+
+	if (launchIndex.x > g_tid_offset[2] || launchIndex.y > g_tid_offset[3])
+		return;
 	float2 d = ((launchIndex.xy / viewportDims) * 2.f - 1.f);
 	float aspectRatio = viewportDims.x / viewportDims.y;
 
-	uint seed = rand_init(g_tid_offset[0], g_tid_offset[1]);
+	uint seed = rand_init(uint(launchIndex.x + launchIndex.y * viewportDims.x), g_random[framecount & 3]);
 
 	float r1 = rand_next(seed);
 	float r2 = rand_next(seed);
-	r1 = (r1*r1 - 0.5) / viewportDims.x / 2;
-	r2 = (r2*r2 - 0.5) / viewportDims.y / 2;
+	r1 = 2 * abs(r1 - 0.5)*(r1 - 0.5) / viewportDims.x;
+	r2 = 2 * abs(r2 - 0.5)*(r2 - 0.5) / viewportDims.y;
 	Ray ray;
 	ray.origin = g_pos;
 	float3 pixel = g_pos + float3(0, 0, -1);
@@ -369,27 +362,8 @@ void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 	ray.direction = normalize(pixel - ray.origin);
 	ray.t_min = 0;
 	ray.t_max = 100000;
-	float4 this_color = float4(tracing(ray, launchIndex.xy),1);
-	//if (g_tid_offset[2] < 1000)
-	//	output[launchIndex.xy] = this_color;
-	//else {
-	//	output[launchIndex.xy] = old_texture[launchIndex.xy];
-	//}
-	//output[launchIndex.xy] = this_color;
+	float4 this_color = float4(tracing(ray, seed/*, hState*/),1);
 	int2 sampleid = launchIndex.xy;
 
-	//float r3 = rand_next(seed);
-	//if (r3 < 0.025)
-	//	sampleid.x--;
-	//else if (r3 > 0.975)
-	//	sampleid.x++;
-
-	//float r4 = rand_next(seed);
-	//if (r4 < 0.025)
-	//	sampleid.y--;
-	//else if (r4 > 0.975)
-	//	sampleid.y++;
-	//this_color = pow(this_color, 1.2);
-	output[launchIndex.xy] = (old_texture[sampleid/* + float2((rand_next(seed)) / 2, (rand_next(seed)) / 2)*/] * framecount + this_color) / (framecount + 1);
-	//output[launchIndex.xy] = float4(tanHalfFovY,0,0,1);
+	output[launchIndex.xy] = (old_texture[sampleid] * framecount + this_color) / (framecount + 1);
 }

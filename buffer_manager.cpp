@@ -95,6 +95,27 @@ static bool CreateTextureBuffer(ID3D11Device* pDevice, uint32_t stride, uint32_t
 	return pDevice->CreateTexture2D(&desc, nullptr, ppBufferOut) >= 0;
 }
 
+static bool CreateTextureBufferWritable(ID3D11Device* pDevice, uint32_t stride, uint32_t width, uint32_t height,
+	ID3D11Texture2D** ppBufferOut)
+{
+	*ppBufferOut = nullptr;
+
+	D3D11_TEXTURE2D_DESC  desc;
+	ZeroMemory(&desc, sizeof(desc));
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	desc.MiscFlags = 0;
+	desc.Width = width;
+	desc.Height = height;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	desc.SampleDesc.Count = 1;
+	desc.Usage = D3D11_USAGE_DYNAMIC;
+
+	return pDevice->CreateTexture2D(&desc, nullptr, ppBufferOut) >= 0;
+}
+
 static bool CreateBufferSRV(ID3D11Device* pDevice, ID3D11Buffer* pBuffer, ID3D11ShaderResourceView** ppSRVOut)
 {
 	D3D11_BUFFER_DESC descBuf;
@@ -217,6 +238,17 @@ void BufferManager::addTextureSRV(uint32_t strip, uint32_t width, uint32_t heigh
 {
 	ID3D11Texture2D* buffer;
 	CreateTextureBuffer(DXUTGetD3D11Device(), strip, width, height, &buffer);
+	textures_.emplace_back(buffer);
+
+	ID3D11ShaderResourceView* srv;
+	CreateTextureSRV(DXUTGetD3D11Device(), buffer, &srv);
+	shader_resource_views.emplace_back(srv);
+}
+
+void BufferManager::addTextureSRVWritable(uint32_t strip, uint32_t width, uint32_t height)
+{
+	ID3D11Texture2D* buffer;
+	CreateTextureBufferWritable(DXUTGetD3D11Device(), strip, width, height, &buffer);
 	textures_.emplace_back(buffer);
 
 	ID3D11ShaderResourceView* srv;
