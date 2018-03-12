@@ -48,7 +48,7 @@ CModelViewerCamera g_Camera; // A model viewing camera
 RayTracer ray_tracer;
 
 static bool save_file = false;
-static bool kk_mode = true;
+static bool kk_mode = false;
 
 static void initScene()
 {

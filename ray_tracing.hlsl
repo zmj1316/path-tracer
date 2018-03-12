@@ -28,7 +28,7 @@ cbuffer RTCB : register(b1)
 };
 
 
-#define STACK_SIZE 4000
+#define STACK_SIZE 15
 #define kEpsilon 1e-4
 
 bool intersection_bound(Ray ray, Bound bound ,float current_t ,out float tout) {
@@ -182,7 +182,7 @@ bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out
 	stack[--stack_top] = 0;
 
 	bool intersected = false;
-	current_t = 1000;
+	current_t = ray.t_max;
 
 	[allow_uav_condition]
 	while (stack_top != STACK_SIZE) {
@@ -204,8 +204,8 @@ bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out
 				stack[--stack_top] = tree[current].right;
 				stack[--stack_top] = tree[current].left;
 				if (stack_top < 0) {
-					barycentrics = float3(1, 1, 1);
-					return true;
+					//barycentrics = float3(1, 1, 1);
+					return intersected;
 				}
 			}
 		}
@@ -230,7 +230,15 @@ float3 tracing(Ray ray, uint seed/*, HaltonState hState*/) {
 		int id = primitives[primitive_index].matid;
 
 		if (itr >= MAX_ITR) {
-			break;
+			if (itr >= 2 * MAX_ITR) {
+				break;
+			}
+			float p = rand_next(seed);
+			if (p < max(max(multi.x, multi.y), multi.z)) {
+			}
+			else {
+				return clamp(multi,float3(0,0,0),float3(1,1,1));
+			}
 		}
 		itr++;
 
@@ -276,13 +284,13 @@ float3 tracing(Ray ray, uint seed/*, HaltonState hState*/) {
 				float R0 = a * a / (b * b);
 				float c = 1 - ddn;
 
-				float Re = R0 + (1 - R0) * c * c * c * c*c;
+				float Re = R0 + (1 - R0) * c * c * c * c;
 				float Tr = 1.f - Re;
 				float P = .25f + .5f * Re;
 				float RP = Re / P;
 				float TP = Tr / (1.f - P);
 
-				if (rand_next(seed) < P) { /* R.R. */
+				if (itr < MAX_ITR && rand_next(seed) < P) { /* R.R. */
 					multi *= RP;
 					this_ray.direction = reflect(this_ray.direction, normal);
 					continue;
@@ -301,10 +309,12 @@ float3 tracing(Ray ray, uint seed/*, HaltonState hState*/) {
 				else if (id == 3)
 					multi *= float3(0.9, 0.1, 0.1);
 
-				//float r1 = 2 * MY_PI * ((1.0f * (framecount & 0x1F) / 0x1F) + rand_next(seed) / 0x20);
-				//this_ray.direction = -2 * dot(this_ray.direction, normal) * normal + this_ray.direction;
 				float r1 = 2 * MY_PI * ((framecount & 1) / 2.0 + rand_next(seed) / 2);
-				float r2 = (((framecount>>1) & 1) / 2.0 + rand_next(seed) / 2);
+				float r2 = (((framecount>>1) & 3) / 4.0 + rand_next(seed) / 4);
+
+				//float r1 = 2 * MY_PI * (rand_next(seed));
+				//float r2 = rand_next(seed);
+
 				float r2s = sqrt(r2);
 				float3 w = normal;
 				float3 u;

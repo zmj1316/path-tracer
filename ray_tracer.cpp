@@ -73,7 +73,7 @@ void RayTracer::loadScene()
 void RayTracer::loadShaders()
 {
 	const D3D10_SHADER_MACRO defines[] = {
-		"MAX_ITR","1",nullptr,nullptr
+		nullptr,nullptr
 	};
 	if (CreateCS(RADIX_SHADER_NAME, "CSMain", defines))
 	{

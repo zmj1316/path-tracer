@@ -68,7 +68,7 @@ HRESULT CompileComputeShader(_In_ LPCWSTR srcFile, _In_ LPCSTR entryPoint,
 }
 
 static bool CreateComputeShader(LPCWSTR pSrcFile, LPCSTR pFunctionName,
-                                ID3D11Device* pDevice, ID3D11ComputeShader** ppShaderOut, const D3D10_SHADER_MACRO *defines_)
+                                ID3D11Device* pDevice, ID3D11ComputeShader** ppShaderOut, const D3D10_SHADER_MACRO *defines)
 {
 	uint32_t dwShaderFlags = D3DCOMPILE_ENABLE_STRICTNESS;
 
@@ -78,11 +78,11 @@ static bool CreateComputeShader(LPCWSTR pSrcFile, LPCSTR pFunctionName,
 	// the release configuration of this program.  
 	dwShaderFlags |= D3DCOMPILE_DEBUG;
 
-	const D3D_SHADER_MACRO defines[] =
-	{
-		"MAX_ITR", "5",
-		nullptr, nullptr
-	};
+	//const D3D_SHADER_MACRO defines[] =
+	//{
+	//	"MAX_ITR", "5",
+	//	nullptr, nullptr
+	//};
 
 	// We generally prefer to use the higher CS shader profile when possible as CS 5.0 is better performance on 11-class hardware  
 	ID3DBlob* pErrorBlob = nullptr;
