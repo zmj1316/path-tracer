@@ -146,6 +146,24 @@ void RayTracer::createBuffers()
 		old_tex_index = textures_.size() - 1;
 		old_tex_srv_index = shader_resource_views.size() - 1;
 	}
+
+	{
+		addTextureSRV(sizeof(uint32_t), width, height);
+		gbuffer_tex_index = textures_.size() - 1;
+		gbuffer_srv_index = shader_resource_views.size() - 1;
+	}
+
+	{
+		addTextureSRV(sizeof(uint32_t), width, height);
+		gbuffer2_tex_index = textures_.size() - 1;
+		gbuffer2_srv_index = shader_resource_views.size() - 1;
+	}
+
+	{
+		addTextureSRV(sizeof(uint32_t), width, height);
+		gbuffer3_tex_index = textures_.size() - 1;
+		gbuffer3_srv_index = shader_resource_views.size() - 1;
+	}
 	//{
 	//	addTextureSRVWritable(sizeof(uint32_t), 256, 256);
 	//	halton_tex_index = textures_.size() - 1;
@@ -195,7 +213,49 @@ void RayTracer::resize(int width, int height)
 		old_tex_index = textures_.size() - 1;
 		old_tex_srv_index = shader_resource_views.size() - 1;
 	}
+	if (gbuffer_srv_index >= 0 && gbuffer_tex_index >= 0)
+	{
+		SAFE_RELEASE(shader_resource_views[gbuffer_srv_index]);
+		SAFE_RELEASE(textures_[gbuffer_tex_index]);
+	}
+	if (gbuffer2_srv_index >= 0 && gbuffer2_tex_index >= 0)
+	{
+		SAFE_RELEASE(shader_resource_views[gbuffer2_srv_index]);
+		SAFE_RELEASE(textures_[gbuffer2_tex_index]);
+	}
+	if (gbuffer3_srv_index >= 0 && gbuffer3_tex_index >= 0)
+	{
+		SAFE_RELEASE(shader_resource_views[gbuffer3_srv_index]);
+		SAFE_RELEASE(textures_[gbuffer3_tex_index]);
+	}
 
+	if (gbuffer4_srv_index >= 0 && gbuffer4_tex_index >= 0)
+	{
+		SAFE_RELEASE(shader_resource_views[gbuffer4_srv_index]);
+		SAFE_RELEASE(textures_[gbuffer4_tex_index]);
+	}
+
+	{
+		addTextureSRV(sizeof(uint32_t), width, height);
+		gbuffer_tex_index = textures_.size() - 1;
+		gbuffer_srv_index = shader_resource_views.size() - 1;
+	}
+	{
+		addTextureSRV(sizeof(uint32_t), width, height);
+		gbuffer2_tex_index = textures_.size() - 1;
+		gbuffer2_srv_index = shader_resource_views.size() - 1;
+	}
+	{
+		addTextureSRV(sizeof(uint32_t), width, height);
+		gbuffer3_tex_index = textures_.size() - 1;
+		gbuffer3_srv_index = shader_resource_views.size() - 1;
+	}
+
+	{
+		addTextureSRV(sizeof(uint32_t), width, height);
+		gbuffer4_tex_index = textures_.size() - 1;
+		gbuffer4_srv_index = shader_resource_views.size() - 1;
+	}
 }
 
 void RayTracer::buildRadixTree()
@@ -221,7 +281,9 @@ void RayTracer::trace()
 	pd3dImmediateContext_->CSSetShader(compute_shaders_[ray_shader_index], nullptr, 0);
 	pd3dImmediateContext_->CSSetShaderResources(0, 1, &shader_resource_views[primitive_render_srv_index]);
 	pd3dImmediateContext_->CSSetShaderResources(1, 1, &shader_resource_views[old_tex_srv_index]);
-	//pd3dImmediateContext_->CSSetShaderResources(2, 1, &shader_resource_views[halton_tex_srv_index]);
+	pd3dImmediateContext_->CSSetShaderResources(2, 1, &shader_resource_views[gbuffer_srv_index]);
+	pd3dImmediateContext_->CSSetShaderResources(3, 1, &shader_resource_views[gbuffer2_srv_index]);
+	pd3dImmediateContext_->CSSetShaderResources(4, 1, &shader_resource_views[gbuffer3_srv_index]);
 
 	pd3dImmediateContext_->CSSetUnorderedAccessViews(0, 1, &unordered_access_views[tree_uav_index], nullptr);
 	pd3dImmediateContext_->CSSetUnorderedAccessViews(1, 1, &unordered_access_views[output_tex_uav_index], nullptr);
@@ -261,7 +323,7 @@ void RayTracer::trace()
 				pd3dImmediateContext_->CSSetConstantBuffers(0, 1, &constant_buffers_[radix_cb_index]);
 				pd3dImmediateContext_->CSSetConstantBuffers(1, 1, &constant_buffers_[rt_cb_index]);
 
-				pd3dImmediateContext_->Dispatch((width / TILEX - 1) / 8 + 1, (height / TILEY - 1) / 8 + 1, PATCHZ);
+				pd3dImmediateContext_->Dispatch((width / TILEX - 1) / 16 + 1, (height / TILEY - 1) / 16 + 1, PATCHZ);
 				pd3dImmediateContext_->CopyResource(textures_[old_tex_index], textures_[output_tex_index]);
 			}
 		}

@@ -116,6 +116,27 @@ static bool CreateTextureBufferWritable(ID3D11Device* pDevice, uint32_t stride, 
 	return pDevice->CreateTexture2D(&desc, nullptr, ppBufferOut) >= 0;
 }
 
+static bool CreateTextureBufferRT(ID3D11Device* pDevice, uint32_t stride, uint32_t width, uint32_t height,
+	ID3D11Texture2D** ppBufferOut)
+{
+	*ppBufferOut = nullptr;
+
+	D3D11_TEXTURE2D_DESC  desc;
+	ZeroMemory(&desc, sizeof(desc));
+	desc.BindFlags = D3D11_BIND_RENDER_TARGET;
+	desc.MiscFlags = 0;
+	desc.Width = width;
+	desc.Height = height;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.CPUAccessFlags = 0;
+	desc.SampleDesc.Count = 1;
+	desc.Usage = D3D11_USAGE_DEFAULT;
+
+	return pDevice->CreateTexture2D(&desc, nullptr, ppBufferOut) >= 0;
+}
+
 static bool CreateBufferSRV(ID3D11Device* pDevice, ID3D11Buffer* pBuffer, ID3D11ShaderResourceView** ppSRVOut)
 {
 	D3D11_BUFFER_DESC descBuf;
@@ -190,6 +211,16 @@ static bool CreateTextureSRV(ID3D11Device* pDevice, ID3D11Texture2D* pBuffer, ID
 	return pDevice->CreateShaderResourceView((ID3D11Resource*)pBuffer, &desc, ppUAVOut) >= 0;
 }
 
+static bool CreateTextureRTV(ID3D11Device* pDevice, ID3D11Texture2D* pBuffer, ID3D11RenderTargetView** ppUAVOut)
+{
+	D3D11_RENDER_TARGET_VIEW_DESC renderTargetViewDesc;
+	renderTargetViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	renderTargetViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
+	renderTargetViewDesc.Texture2D.MipSlice = 0;
+
+	return pDevice->CreateRenderTargetView((ID3D11Resource*)pBuffer, &renderTargetViewDesc, ppUAVOut) >= 0;
+}
+
 void BufferManager::addSRV(uint32_t strip, uint32_t count, void* data)
 {
 	ID3D11Buffer* buffer;
@@ -256,6 +287,17 @@ void BufferManager::addTextureSRVWritable(uint32_t strip, uint32_t width, uint32
 	shader_resource_views.emplace_back(srv);
 }
 
+void BufferManager::addRenderTargetView(uint32_t strip, uint32_t width, uint32_t height)
+{
+	ID3D11Texture2D* buffer;
+	CreateTextureBufferRT(DXUTGetD3D11Device(), strip, width, height, &buffer);
+	textures_.emplace_back(buffer);
+
+	ID3D11RenderTargetView* srv;
+	CreateTextureRTV(DXUTGetD3D11Device(), buffer, &srv);
+	render_target_views.emplace_back(srv);
+}
+
 void BufferManager::addCB(uint32_t strip, uint32_t count, void* data)
 {
 	ID3D11Buffer* buffer;
@@ -269,6 +311,7 @@ void BufferManager::release()
 {
 	VECTOR_RELEASE(shader_resource_views);
 	VECTOR_RELEASE(unordered_access_views);
+	VECTOR_RELEASE(render_target_views);
 	VECTOR_RELEASE(constant_buffers_);
 	VECTOR_RELEASE(buffers_);
 	VECTOR_RELEASE(textures_);

@@ -277,6 +277,8 @@ void Scene::loadObj(const char* filename)
 			{
 				pos[i].v[0] = -pos[i].v[0];
 				normal[i].v[0] = -normal[i].v[0];
+				//normal[i].v[1] = -normal[i].v[1];
+				//normal[i].v[2] = -normal[i].v[2];
 				geo.indicess[pg_index].push_back(geo.vertices_pos.size());
 				geo.vertices_pos.push_back({pos[i]});
 				geo.vertices_xyzn.push_back({pos[i],normal[i]});

@@ -31,13 +31,14 @@ struct CB_VS_PER_FRAME
 {
 	D3DXMATRIX m_WorldViewProj;
 	D3DXMATRIX m_World;
-	vec4 light_dir;
+
 } render_cb_per_frame;
 
 #pragma pack(16)
 struct CB_VS_PER_DP
 {
-	D3DXVECTOR4 params;
+	vec3 color;
+	int matid;
 } render_cb_per_dp;
 
 
@@ -92,10 +93,17 @@ HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFAC
 	HRESULT hr;
 	{
 		shader_manager_.CreatePipelineShaders();
+
 		CB_VS_PER_FRAME tmp;
 		render_buffer_manager_.addCB(sizeof(CB_VS_PER_FRAME), 1, &tmp);
 		CB_VS_PER_DP tmp2;
 		render_buffer_manager_.addCB(sizeof(CB_VS_PER_DP), 1, &tmp2);
+		for (size_t i = 0; i < 4; i++)
+		{
+			render_buffer_manager_.addRenderTargetView(sizeof(uint32_t), pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height);
+		}
+
+
 		scene.buildBuffers(pd3dDevice);
 
 		// Setup the camera's view parameters
@@ -142,6 +150,17 @@ HRESULT CALLBACK OnD3D11ResizedSwapChain(ID3D11Device* pd3dDevice, IDXGISwapChai
 
 	if (!kk_mode)
 		ray_tracer.resize(pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height);
+	{
+		render_buffer_manager_.release();
+		CB_VS_PER_FRAME tmp;
+		render_buffer_manager_.addCB(sizeof(CB_VS_PER_FRAME), 1, &tmp);
+		CB_VS_PER_DP tmp2;
+		render_buffer_manager_.addCB(sizeof(CB_VS_PER_DP), 1, &tmp2);
+		for (size_t i = 0; i < 4; i++)
+		{
+			render_buffer_manager_.addRenderTargetView(sizeof(uint32_t), pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height);
+		}
+	}
 	return S_OK;
 }
 
@@ -190,7 +209,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 {
 	HRESULT hr;
 	// Clear render target and the depth stencil 
-	float ClearColor[4] = {0.176f, 0.196f, 0.667f, 0.0f};
+	float ClearColor[4] = {0, 0, 0, 0.0f};
 
 	ID3D11RenderTargetView* pRTV = DXUTGetD3D11RenderTargetView();
 	ID3D11DepthStencilView* pDSV = DXUTGetD3D11DepthStencilView();
@@ -198,6 +217,92 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 	pd3dImmediateContext->ClearDepthStencilView(pDSV, D3D11_CLEAR_DEPTH, 1.0, 0);
 
 	pd3dImmediateContext->RSSetState(g_noculling_state);
+
+	if (!ray)
+	{
+		pd3dImmediateContext->ClearRenderTargetView(render_buffer_manager_.render_target_views[0], ClearColor);
+		pd3dImmediateContext->ClearRenderTargetView(render_buffer_manager_.render_target_views[1], ClearColor);
+
+		ID3D11RenderTargetView * rtv2[3] = { pRTV ,render_buffer_manager_.render_target_views[0],render_buffer_manager_.render_target_views[1]};
+		pd3dImmediateContext->OMSetRenderTargets(3, rtv2, DXUTGetD3D11DepthStencilView());
+		D3DXMATRIX mWorldViewProjection;
+		D3DXVECTOR3 vLightDir;
+		D3DXMATRIX mWorld;
+		D3DXMATRIX mView;
+		D3DXMATRIX mProj;
+		D3DXMatrixTranslation(&mWorld, 0, -5, 0);
+		mWorld = mWorld * *g_Camera.GetWorldMatrix();
+		mProj = *g_Camera.GetProjMatrix();
+		mView = *g_Camera.GetViewMatrix();
+
+		mWorldViewProjection = mWorld * mView * mProj;
+
+
+		D3D11_MAPPED_SUBRESOURCE MappedResource;
+		V(pd3dImmediateContext->Map(render_buffer_manager_.constant_buffers_[0], 0, D3D11_MAP_WRITE_DISCARD, 0, &
+			MappedResource));
+		CB_VS_PER_FRAME* cb_vs_per_frame = (CB_VS_PER_FRAME*)MappedResource.pData;
+		D3DXMatrixTranspose(&cb_vs_per_frame->m_WorldViewProj, &mWorldViewProjection);
+		D3DXMatrixTranspose(&cb_vs_per_frame->m_World, &mWorld);
+		pd3dImmediateContext->Unmap(render_buffer_manager_.constant_buffers_[0], 0);
+
+		pd3dImmediateContext->VSSetShader(shader_manager_.vertex_shader_, nullptr, 0);
+		pd3dImmediateContext->PSSetShader(shader_manager_.pixel_shader_, nullptr, 0);
+		pd3dImmediateContext->IASetInputLayout(shader_manager_.vertex_layout_);
+		pd3dImmediateContext->VSSetConstantBuffers(0, 1, &render_buffer_manager_.constant_buffers_[0]);
+		pd3dImmediateContext->PSSetConstantBuffers(0, 1, &render_buffer_manager_.constant_buffers_[0]);
+		pd3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+		for (auto&& geo : scene.geos)
+		{
+			uint32_t stride = sizeof(xyzn);
+			uint32_t offset = 0;
+			pd3dImmediateContext->IASetVertexBuffers(0, 1, &geo.vertex_buffer_, &stride, &offset);
+			for (int i = 0; i < geo.indicess.size(); ++i)
+			{
+				V(pd3dImmediateContext->Map(render_buffer_manager_.constant_buffers_[1], 0, D3D11_MAP_WRITE_DISCARD, 0, &
+					MappedResource));
+				CB_VS_PER_DP* cb_vs_per_dp = (CB_VS_PER_DP*)MappedResource.pData;
+				auto matid = geo.material_ids[i];
+				cb_vs_per_dp->color.v[0] = scene.materials_[matid].diffuse[0];
+				cb_vs_per_dp->color.v[1] = scene.materials_[matid].diffuse[1];
+				cb_vs_per_dp->color.v[2] = scene.materials_[matid].diffuse[2];
+				cb_vs_per_dp->matid = matid;
+				pd3dImmediateContext->Unmap(render_buffer_manager_.constant_buffers_[1], 0);
+				pd3dImmediateContext->PSSetConstantBuffers(1, 1, &render_buffer_manager_.constant_buffers_[1]);
+
+
+				pd3dImmediateContext->IASetIndexBuffer(geo.index_buffers_[i], DXGI_FORMAT_R32_UINT, 0);
+				pd3dImmediateContext->DrawIndexed(geo.indicess[i].size(), 0, 0);
+			}
+		}
+		{
+			{
+				ID3D11Resource* r;
+				pRTV->GetResource(&r);
+				pd3dImmediateContext->CopyResource(ray_tracer.textures_[ray_tracer.gbuffer_tex_index], r);
+				SAFE_RELEASE(r);
+			}
+
+			{
+				ID3D11Resource* r;
+				render_buffer_manager_.render_target_views[0]->GetResource(&r);
+				pd3dImmediateContext->CopyResource(ray_tracer.textures_[ray_tracer.gbuffer2_tex_index], r);
+				SAFE_RELEASE(r);
+			}
+
+			{
+				ID3D11Resource* r;
+				render_buffer_manager_.render_target_views[1]->GetResource(&r);
+				pd3dImmediateContext->CopyResource(ray_tracer.textures_[ray_tracer.gbuffer3_tex_index], r);
+				SAFE_RELEASE(r);
+			}
+		}
+
+		pd3dImmediateContext->OMSetRenderTargets(1, rtv2, DXUTGetD3D11DepthStencilView());
+	}
+
+
+
 	if (ray)
 	{
 		/* create query for synchronous dispatches */
@@ -211,7 +316,9 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		V(pd3dImmediateContext->Map(ray_tracer.constant_buffers_[0], 0, D3D11_MAP_WRITE_DISCARD, 0, &
 			MappedResource));
 		CB_Radix* cb_vs_per_frame = (CB_Radix*)MappedResource.pData;
-		cb_vs_per_frame->pos = g_pos;
+		cb_vs_per_frame->pos.v[0] = g_Camera.GetViewMatrix()->m[3][0];
+		cb_vs_per_frame->pos.v[1] = g_Camera.GetViewMatrix()->m[3][1];
+		cb_vs_per_frame->pos.v[2] = g_Camera.GetViewMatrix()->m[3][2];
 		cb_vs_per_frame->node_count = ray_tracer.primitive_count;
 		pd3dImmediateContext->Unmap(ray_tracer.constant_buffers_[0], 0);
 
@@ -259,7 +366,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		//Sleep(700);
 	}
 
-	if (!kk_mode)
+	if (!kk_mode && ray)
 	{
 		ID3D11Resource* r;
 		pRTV->GetResource(&r);
@@ -275,59 +382,6 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		save_file = false;
 	}
 
-	if (!ray)
-	{
-		D3DXMATRIX mWorldViewProjection;
-		D3DXVECTOR3 vLightDir;
-		D3DXMATRIX mWorld;
-		D3DXMATRIX mView;
-		D3DXMATRIX mProj;
-		D3DXMatrixTranslation(&mWorld, 0, -5, 0);
-		mWorld = mWorld * *g_Camera.GetWorldMatrix();
-		mProj = *g_Camera.GetProjMatrix();
-		mView = *g_Camera.GetViewMatrix();
-
-		mWorldViewProjection = mWorld * mView * mProj;
-
-
-		D3D11_MAPPED_SUBRESOURCE MappedResource;
-		V(pd3dImmediateContext->Map(render_buffer_manager_.constant_buffers_[0], 0, D3D11_MAP_WRITE_DISCARD, 0, &
-			MappedResource));
-		CB_VS_PER_FRAME* cb_vs_per_frame = (CB_VS_PER_FRAME*)MappedResource.pData;
-		D3DXMatrixTranspose(&cb_vs_per_frame->m_WorldViewProj, &mWorldViewProjection);
-		D3DXMatrixTranspose(&cb_vs_per_frame->m_World, &mWorld);
-		cb_vs_per_frame->light_dir = vec4{1, 0, 0,0};
-		pd3dImmediateContext->Unmap(render_buffer_manager_.constant_buffers_[0], 0);
-
-		pd3dImmediateContext->VSSetShader(shader_manager_.vertex_shader_, nullptr, 0);
-		pd3dImmediateContext->PSSetShader(shader_manager_.pixel_shader_, nullptr, 0);
-		pd3dImmediateContext->IASetInputLayout(shader_manager_.vertex_layout_);
-		pd3dImmediateContext->VSSetConstantBuffers(0, 1, &render_buffer_manager_.constant_buffers_[0]);
-		pd3dImmediateContext->PSSetConstantBuffers(0, 1, &render_buffer_manager_.constant_buffers_[0]);
-		pd3dImmediateContext->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-		for (auto&& geo : scene.geos)
-		{
-			uint32_t stride = sizeof(xyzn);
-			uint32_t offset = 0;
-			pd3dImmediateContext->IASetVertexBuffers(0, 1, &geo.vertex_buffer_, &stride, &offset);
-			for (int i = 0; i < geo.indicess.size(); ++i)
-			{
-				V(pd3dImmediateContext->Map(render_buffer_manager_.constant_buffers_[1], 0, D3D11_MAP_WRITE_DISCARD, 0, &
-					MappedResource));
-				CB_VS_PER_DP* cb_vs_per_dp = (CB_VS_PER_DP*)MappedResource.pData;
-				auto matid = geo.material_ids[i];
-				cb_vs_per_dp->params.x = (matid & 1) ? 1 : 0;
-				cb_vs_per_dp->params.y = (matid & 2) ? 1 : 0;
-				cb_vs_per_dp->params.z = (matid & 4) ? 1 : 0;
-				pd3dImmediateContext->Unmap(render_buffer_manager_.constant_buffers_[1], 0);
-				pd3dImmediateContext->PSSetConstantBuffers(1, 1, &render_buffer_manager_.constant_buffers_[1]);
-
-
-				pd3dImmediateContext->IASetIndexBuffer(geo.index_buffers_[i], DXGI_FORMAT_R32_UINT, 0);
-				pd3dImmediateContext->DrawIndexed(geo.indicess[i].size(), 0, 0);
-			}
-		}
-	}
 
 	ImGui_ImplDX11_NewFrame();
 	{

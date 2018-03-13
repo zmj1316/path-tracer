@@ -9,8 +9,10 @@ Texture2D<unorm float4> old_texture : register(t1);
 RWStructuredBuffer<TreeNode> tree : register(u0);
 RWTexture2D<unorm float4> output : register(u1);
 
-Texture2D<uint> gHaltonTexture : register(t2);
-#include "Halton.hlsli"
+Texture2D<unorm float4> diffuseTex : register(t2);
+Texture2D<unorm float4> normalTex : register(t3);
+Texture2D<unorm float4> worldTex : register(t4);
+//#include "Halton.hlsli"
 
 // 对应于主机端的constant buffer  
 cbuffer RadixCB : register(b0)
@@ -217,6 +219,145 @@ bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out
 #define MAX_ITR 5
 #endif
 
+bool getBounce(float3 view_dir, float3 normal, int id, inout float3 multi, out float3 direction, uint seed) {
+	direction = float3(0, 0, 0);
+	if (id == 0) { // emit
+		multi = multi * float3(8, 8, 8);
+		return false;
+	}
+	else {
+		if (id == 5) {
+			float cos = dot(normal, view_dir);
+
+			float nc = 1.f;
+			float nt = 1.5f;
+			float nnt = nc / nt;
+			if (cos > 0)
+				nnt = nt / nc;
+			float ddn = abs(cos);
+			float cos2t = 1.f - nnt * nnt * (1.f - ddn * ddn);
+
+			if (cos2t < 0.0f) {
+				direction = reflect(view_dir, normal);
+				return true;
+			}
+
+			if (cos < 0) {
+				direction = normalize(nnt * view_dir - (cos * nnt + sqrt(cos2t)) * normal);
+			}
+			else {
+				direction = normalize(nnt * view_dir + (-cos * nnt + sqrt(cos2t)) * normal);
+			}
+
+			float a = nt - nc;
+			float b = nt + nc;
+			float R0 = a * a / (b * b);
+			float c = 1 - ddn;
+
+			float Re = R0 + (1 - R0) * c * c * c * c;
+			float Tr = 1.f - Re;
+			float P = .25f + .5f * Re;
+			float RP = Re / P;
+			float TP = Tr / (1.f - P);
+
+			if (rand_next(seed) < P) { /* R.R. */
+				multi *= RP;
+				direction = reflect(view_dir, normal);
+				return true;
+			}
+			else
+			{
+				multi *= TP;
+				return true;
+			}
+		}
+		else if (id == 4) {
+			direction = reflect(view_dir, normal);
+			float r1 = 2 * MY_PI * (rand_next(seed));
+			float height = pow(rand_next(seed), 1 / (1000.0));
+			float r2s = sqrt(1 - height * height);
+			float3 w = direction;
+			float3 u;
+			if (abs(w.x) > 0.1) {
+				u = cross(w, float3(0, 1, 0));
+			}
+			else {
+				u = cross(w, float3(1, 0, 0));
+			}
+			u = normalize(u);
+			float3 v = (cross(w, u));
+			direction = normalize(u*cos(r1)*r2s + v * sin(r1)*r2s + w * height);
+		}
+		else {
+			if (id == 3)
+				multi *= float3(0.1, 0.1, 0.9);
+			else if (id == 2)
+				multi *= float3(0.9, 0.1, 0.1);
+
+			float r1 = 2 * MY_PI * ((framecount & 1) / 2.0 + rand_next(seed) / 2);
+			float r2 = (((framecount >> 1) & 3) / 4.0 + rand_next(seed) / 4);
+
+			//float r1 = 2 * MY_PI * (rand_next(seed));
+			//float r2 = rand_next(seed);
+
+			float r2s = sqrt(r2);
+			float3 w = normal;
+			float3 u;
+			if (abs(w.x) > 0.1) {
+				u = cross(w, float3(0, 1, 0));
+			}
+			else {
+				u = cross(w, float3(1, 0, 0));
+			}
+			u = normalize(u);
+			float3 v = (cross(w, u));
+			direction = normalize(u*cos(r1)*r2s + v * sin(r1)*r2s + w * sqrt(1 - r2));
+		}
+	}
+	return direction;
+}
+
+float3 second_tracing(uint2 launchIndex, uint seed) {
+	float4 diffuse = diffuseTex[launchIndex.xy];
+	float4 normal = normalTex[launchIndex.xy];
+	float4 hitPos = worldTex[launchIndex.xy];
+
+	int itr = 1;
+	int primitive_index;
+	float3 barycentrics;
+	float t;
+	Ray this_ray;
+	this_ray.t_min = kEpsilon;
+	this_ray.t_max = 1000;
+	this_ray.origin = hitPos;
+	float3 multi = diffuse.xyz;
+	int matid = (pow(normal.w, 1 / 2.2)) * 255 - 1;
+	if (matid == 0)
+		return float3(0, 0, 0);
+	float3 direction;
+	getBounce(hitPos - g_pos, normal, matid, multi, direction, seed);
+	this_ray.direction = direction;
+	[allow_uav_condition]
+	while (intersect(this_ray, primitive_index, barycentrics, t)) {
+		itr++;
+		matid = primitives[primitive_index].matid;
+		if (itr >= MAX_ITR) {
+			multi = float3(0, 0, 0);
+			break;
+		}
+		float3 A = primitives[primitive_index].vertices[0].normal;
+		float3 B = primitives[primitive_index].vertices[1].normal;
+		float3 C = primitives[primitive_index].vertices[2].normal;
+		float3 new_normal = A * barycentrics.z + B * barycentrics.x + C * barycentrics.y;
+
+		if (!getBounce(this_ray.direction, new_normal, matid, multi, direction, seed))
+			return multi;
+		this_ray.direction = direction;
+		return float3(1, 0, 0);
+	}
+	return float3(0,0,0);
+}
+
 float3 tracing(Ray ray, uint seed/*, HaltonState hState*/) {
 	int primitive_index;
 	float3 barycentrics;
@@ -230,19 +371,20 @@ float3 tracing(Ray ray, uint seed/*, HaltonState hState*/) {
 		int id = primitives[primitive_index].matid;
 
 		if (itr >= MAX_ITR) {
-			if (itr >= 2 * MAX_ITR) {
-				break;
-			}
-			float p = rand_next(seed);
-			if (p < max(max(multi.x, multi.y), multi.z)) {
-			}
-			else {
-				return clamp(multi,float3(0,0,0),float3(1,1,1));
-			}
+			break;
+			//if (itr >= 8) {
+			//	break;
+			//}
+			//float p = rand_next(seed);
+			//if (p < max(max(multi.x, multi.y), multi.z)) {
+			//}
+			//else {
+			//	return clamp(multi,float3(0,0,0),float3(1,1,1));
+			//}
 		}
 		itr++;
 
-		if ( id == 1) {
+		if ( id == 0) { // emit
 			return multi * float3(8, 8, 8);
 			break;
 		}
@@ -255,7 +397,7 @@ float3 tracing(Ray ray, uint seed/*, HaltonState hState*/) {
 			float3 hitPoint = this_ray.origin + t * this_ray.direction;
 
 			this_ray.origin = hitPoint;
-			if (id == 0) {
+			if (id == 5) {
 				float cos = dot(normal, this_ray.direction);
 
 				float nc = 1.f;
@@ -277,7 +419,6 @@ float3 tracing(Ray ray, uint seed/*, HaltonState hState*/) {
 				else {
 					this_ray.direction = normalize(nnt * this_ray.direction + (-cos * nnt + sqrt(cos2t)) * normal);
 				}
-
 					 
 				float a = nt - nc;
 				float b = nt + nc;
@@ -295,18 +436,33 @@ float3 tracing(Ray ray, uint seed/*, HaltonState hState*/) {
 					this_ray.direction = reflect(this_ray.direction, normal);
 					continue;
 				}
-				else {
+				else 
+				{
 					multi *= TP;
 					continue;
 				}
 			}
-			else if (id == 6) {
+			else if (id == 4) {
 				this_ray.direction = reflect(this_ray.direction, normal);
+				float r1 = 2 * MY_PI * (rand_next(seed));
+				float height = pow(rand_next(seed), 1 / (1000.0));
+				float r2s = sqrt(1 - height * height);
+				float3 w = this_ray.direction;
+				float3 u;
+				if (abs(w.x) > 0.1) {
+					u = cross(w, float3(0, 1, 0));
+				}
+				else {
+					u = cross(w, float3(1, 0, 0));
+				}
+				u = normalize(u);
+				float3 v = (cross(w, u));
+				this_ray.direction = normalize(u*cos(r1)*r2s + v * sin(r1)*r2s + w * height);
 			}
 			else {
-				if (id == 4)
+				if (id == 3)
 					multi *= float3(0.1, 0.1, 0.9);
-				else if (id == 3)
+				else if (id == 2)
 					multi *= float3(0.9, 0.1, 0.1);
 
 				float r1 = 2 * MY_PI * ((framecount & 1) / 2.0 + rand_next(seed) / 2);
@@ -344,7 +500,7 @@ float3 tracing(Ray ray, uint seed/*, HaltonState hState*/) {
 //	return (int(0xFF * rgb.x) << 16) | int(0xFF * rgb.y) << 8 | int(0xFF * rgb.z);
 //}
 
-[numthreads(8, 8, 1)]
+[numthreads(16, 16, 1)]
 void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 {
 	launchIndex.x += g_tid_offset[0];
@@ -357,7 +513,7 @@ void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 	float2 d = ((launchIndex.xy / viewportDims) * 2.f - 1.f);
 	float aspectRatio = viewportDims.x / viewportDims.y;
 
-	uint seed = rand_init(uint(launchIndex.x + launchIndex.y * viewportDims.x), g_random[framecount & 3]);
+	uint seed = rand_init(uint(launchIndex.x + launchIndex.y * viewportDims.x) + g_random[0], g_random[framecount & 3]);
 
 	float r1 = rand_next(seed);
 	float r2 = rand_next(seed);
@@ -372,8 +528,10 @@ void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 	ray.direction = normalize(pixel - ray.origin);
 	ray.t_min = 0;
 	ray.t_max = 100000;
-	float4 this_color = float4(tracing(ray, seed/*, hState*/),1);
+	float4 this_color = float4(tracing(ray, seed/*, hState*/), 1);
+	this_color = float4(second_tracing(launchIndex.xy, seed/*, hState*/),1);
 	int2 sampleid = launchIndex.xy;
 
-	output[launchIndex.xy] = (old_texture[sampleid] * framecount + this_color) / (framecount + 1);
+	//sampleid.x = viewportDims.x - sampleid.x;
+	output[sampleid.xy] = (old_texture[sampleid] * framecount + this_color) / (framecount + 1);
 }

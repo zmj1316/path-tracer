@@ -43,6 +43,18 @@ public:
 	std::vector<PrimitiveRayCS> ray_cs_primitives;
 	int output_tex_index = -1;
 
+	int gbuffer_tex_index = -1;
+	int gbuffer_srv_index = -1;
+
+	int gbuffer2_tex_index = -1;
+	int gbuffer2_srv_index = -1;
+
+	int gbuffer3_tex_index = -1;
+	int gbuffer3_srv_index = -1;
+
+	int gbuffer4_tex_index = -1;
+	int gbuffer4_srv_index = -1;
+
 	void loadScene();
 	void loadShaders();
 	void createBuffers();
