@@ -295,7 +295,6 @@ void RayTracer::trace()
 #define TILEX 1
 #define TILEY 1
 #define INT_FRAM 1
-#define PATCHZ 1
 
 	for (int w = 0; w < width; w += width / TILEX)
 	{
@@ -323,13 +322,13 @@ void RayTracer::trace()
 				pd3dImmediateContext_->CSSetConstantBuffers(0, 1, &constant_buffers_[radix_cb_index]);
 				pd3dImmediateContext_->CSSetConstantBuffers(1, 1, &constant_buffers_[rt_cb_index]);
 
-				pd3dImmediateContext_->Dispatch((width / TILEX - 1) / 16 + 1, (height / TILEY - 1) / 16 + 1, PATCHZ);
+				pd3dImmediateContext_->Dispatch((width / TILEX - 1) / 16 + 1, (height / TILEY - 1) / 16 + 1, 1);
 				pd3dImmediateContext_->CopyResource(textures_[old_tex_index], textures_[output_tex_index]);
 			}
 		}
 	}
 
-	frame_count+= INT_FRAM * PATCHZ;
+	frame_count+= INT_FRAM;
 }
 
 void RayTracer::finish()

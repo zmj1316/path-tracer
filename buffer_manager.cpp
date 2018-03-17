@@ -334,6 +334,7 @@ void BufferManager::addCB(uint32_t strip, uint32_t count, void* data)
 {
 	ID3D11Buffer* buffer;
 	CreateConstantBuffer(DXUTGetD3D11Device(), strip * count, data, &buffer);
+	DXUT_SetDebugName(buffer, "CB_in_manager");
 	constant_buffers_.push_back(buffer);
 }
 

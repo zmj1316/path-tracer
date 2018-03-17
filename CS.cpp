@@ -373,6 +373,11 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 			{
 				mat.kd = { 1,1,1 };
 			}
+			{
+				mat.ks.v[0] = material.specular[0];
+				mat.ks.v[1] = material.specular[1];
+				mat.ks.v[2] = material.specular[2];
+			}
 			mat.tr = 1 - material.dissolve;
 			mat.ni = material.ior;
 		}
@@ -398,14 +403,26 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 				(ray_tracer.frame_count == 10000) ||
 				(ray_tracer.frame_count == 12000) ||
 				(ray_tracer.frame_count == 16000) ||
-				(ray_tracer.frame_count == 20000)
+				(ray_tracer.frame_count == 20000) ||
+				(ray_tracer.frame_count == 30000) ||
+				(ray_tracer.frame_count == 35000) ||
+				(ray_tracer.frame_count == 40000) ||
+				(ray_tracer.frame_count == 60000) ||
+				(ray_tracer.frame_count == 80000) ||
+				(ray_tracer.frame_count == 100000) ||
+				(ray_tracer.frame_count == 120000) ||
+				(ray_tracer.frame_count == 150000) ||
+				(ray_tracer.frame_count == 200000) ||
+				(ray_tracer.frame_count == 300000) ||
+				(ray_tracer.frame_count == 400000)
+
 			)
 			{
 				save_file = true;
 				break;
 			}
 
-			if (ray_tracer.frame_count > 20002)
+			if (ray_tracer.frame_count > 400002)
 			{
 				exit(0);
 			}

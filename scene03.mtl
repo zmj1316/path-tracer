@@ -1,7 +1,7 @@
 # 3ds Max Wavefront OBJ Exporter v0.97b - (c)2007 guruware
-# File Created: 17.03.2018 15:40:17
+# File Created: 17.03.2018 19:48:25
 
-newmtl _scene02initialShadingGroup
+newmtl _scene03_scene02initialShadingGroup
 	Ns 1.0000
 	Ni 1.5000
 	d 1.0000
@@ -13,7 +13,7 @@ newmtl _scene02initialShadingGroup
 	Ks 0.0000 0.0000 0.0000
 	Ke 0.0000 0.0000 0.0000
 
-newmtl _scene02lambert3SG
+newmtl _scene03_scene02lambert3SG
 	Ns 1.0000
 	Ni 1.5000
 	d 1.0000
@@ -23,10 +23,10 @@ newmtl _scene02lambert3SG
 	Ka 1.0000 1.0000 1.0000
 	Kd 0.5000 0.5000 0.5000
 	Ks 0.0000 0.0000 0.0000
-	Ke 1.0000 1.0000 1.0000
+	Ke 0.5 0.5 0.5
 
-newmtl _scene02glossy_plane2
-	Ns 50.0000
+newmtl _scene03_scene02glossy_plane2
+	Ns 10000.0000
 	Ni 1.5000
 	d 1.0000
 	Tr 0.0000
@@ -37,8 +37,8 @@ newmtl _scene02glossy_plane2
 	Ks 1.0000 1.0000 1.0000
 	Ke 0.0000 0.0000 0.0000
 
-newmtl _scene02glossy_plane3
-	Ns 20.0000
+newmtl _scene03_scene02glossy_plane3
+	Ns 900.0000
 	Ni 1.5000
 	d 1.0000
 	Tr 0.0000
@@ -49,8 +49,8 @@ newmtl _scene02glossy_plane3
 	Ks 1.0000 1.0000 1.0000
 	Ke 0.0000 0.0000 0.0000
 
-newmtl _scene02glossy_plane4
-	Ns 10.0000
+newmtl _scene03_scene02glossy_plane4
+	Ns 300.0000
 	Ni 1.5000
 	d 1.0000
 	Tr 0.0000
@@ -61,8 +61,8 @@ newmtl _scene02glossy_plane4
 	Ks 1.0000 1.0000 1.0000
 	Ke 0.0000 0.0000 0.0000
 
-newmtl _scene02glossy_plane5
-	Ns 5.0000
+newmtl _scene03_scene02glossy_plane5
+	Ns 100.0000
 	Ni 1.5000
 	d 1.0000
 	Tr 0.0000

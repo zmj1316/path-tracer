@@ -249,6 +249,8 @@ bool intersect(in Ray ray, out int primitive_index, out float3 barycentrics, out
 bool getBounce(float3 view_dir, float3 normal, int id, inout float3 multi, out float3 direction,inout uint seed) {
 	direction = float3(0, 0, 0);
 	Material mat = mats[id];
+	float rand_mat = rand_next(seed);
+	float base = mat.tr + mat.ks[0] + mat.kd[0];
 	if (mat.ke > 0) { // emit
 		multi = multi * float3(mat.ke, mat.ke, mat.ke);
 		return false;
@@ -282,7 +284,7 @@ bool getBounce(float3 view_dir, float3 normal, int id, inout float3 multi, out f
 			float R0 = a * a / (b * b);
 			float c = 1 - ddn;
 
-			float Re = R0 + (1 - R0) * c * c * c * c;
+			float Re = R0 + (1 - R0) * c * c * c * c * c;
 			float Tr = mat.tr;
 			float P = .25f + .5f * Re;
 			float RP = Re / P;
@@ -299,28 +301,29 @@ bool getBounce(float3 view_dir, float3 normal, int id, inout float3 multi, out f
 				return true;
 			}
 		}
-		else if (mat.ns > 1) {
+		else if ((mat.ns > 1&& rand_mat < mat.ks[0] / base) /*|| mat.tr > 0*/) {
 			direction = reflect(view_dir, normal);
 			float r1 = 2 * MY_PI * ((framecount & 1) / 2.0 + rand_next(seed) / 2);
-			float height = pow((((framecount >> 1) & 3) / 4.0 + rand_next(seed) / 4), 1 / (mat.ns * mat.ns));
+			float height = pow((((framecount >> 1) & 3) / 4.0 + rand_next(seed) / 4), 1 / (mat.ns));
 			float r2s = sqrt(1 - height * height);
 			float3 w = direction;
-			float3 u;
-			if (abs(w.x) > 0.1) {
-				u = cross(w, float3(0, 1, 0));
-			}
-			else {
-				u = cross(w, float3(1, 0, 0));
-			}
+			float3 u = cross(w,view_dir);
+			//if (abs(w.x) > 0.1) {
+			//	u = cross(w, float3(0, 1, 0));
+			//}
+			//else {
+			//	u = cross(w, float3(1, 0, 0));
+			//}
 			u = normalize(u);
-			float3 v = (cross(w, u));
+			float3 v = 1.3 * (cross(w, u)); // 假装有各向异性
 			direction = normalize(u*cos(r1)*r2s + v * sin(r1)*r2s + w * height);
+			multi *= mat.ks;
 		}
 		else {
 			multi *= mat.kd;
 
-			float r1 = 2 * MY_PI * ((framecount & 1) / 2.0 + rand_next(seed) / 2);
-			float r2 = (((framecount >> 1) & 3) / 4.0 + rand_next(seed) / 4);
+			float r1 = 2 * MY_PI * (((framecount >>1 ) & 3) / 4.0 + rand_next(seed) / 4.0);
+			float r2 = (((framecount >> 3) & 3) / 4.0 + rand_next(seed) / 4.0);
 
 			//float r1 = 2 * MY_PI * (rand_next(seed));
 			//float r2 = rand_next(seed);
@@ -371,15 +374,15 @@ float3 second_tracing(uint2 launchIndex, uint seed) {
 		itr++;
 		matid = primitives[primitive_index].matid;
 		if (itr > MAX_ITR) {
-			float p = rand_next(seed);
-			if (p < max(max(multi.x, multi.y), multi.z)) {
-				multi / p;
+			float p = max(max(multi.x, multi.y), multi.z);
+			if (p > rand_next(seed)) {
+				multi = multi * (1 / p);
 			}
 			else {
 				return float3(0, 0, 0);
 			}
 		}
-		if (itr >= MAX_ITR*2) {
+		if (itr >= MAX_ITR * 3) {
 			return float3(0, 0, 0);
 		}
 		float3 A = primitives[primitive_index].vertices[0].normal;
@@ -406,11 +409,12 @@ void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 	float2 d = ((launchIndex.xy / viewportDims) * 2.f - 1.f);
 	float aspectRatio = viewportDims.x / viewportDims.y;
 
-	uint seed = rand_init(uint(launchIndex.x + launchIndex.y * viewportDims.x), g_random[framecount&3]);
+	uint seed = rand_init(uint(launchIndex.x + launchIndex.y * viewportDims.x), g_random[0]);
 
 	float4 this_color = float4(second_tracing(launchIndex.xy, seed/*, hState*/),1);
 	int2 sampleid = launchIndex.xy;
 
-	//sampleid.x = viewportDims.x - sampleid.x;
-	output[sampleid.xy] = (old_texture[sampleid] * framecount + this_color) / (framecount + 1);
+	float old_factor = 1.0f * framecount / (framecount + 1);
+	float new_factor = 1.0f / (framecount + 1);
+	output[sampleid.xy] = pow(pow(old_texture[sampleid],2.2) * old_factor + this_color * new_factor , 1 /2.2);
 }
