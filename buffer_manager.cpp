@@ -116,6 +116,27 @@ static bool CreateTextureBufferWritable(ID3D11Device* pDevice, uint32_t stride, 
 	return pDevice->CreateTexture2D(&desc, nullptr, ppBufferOut) >= 0;
 }
 
+static bool CreateTextureBufferFloat4(ID3D11Device* pDevice, uint32_t stride, uint32_t width, uint32_t height,
+	ID3D11Texture2D** ppBufferOut)
+{
+	*ppBufferOut = nullptr;
+
+	D3D11_TEXTURE2D_DESC  desc;
+	ZeroMemory(&desc, sizeof(desc));
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	desc.MiscFlags = 0;
+	desc.Width = width;
+	desc.Height = height;
+	desc.MipLevels = 1;
+	desc.ArraySize = 1;
+	desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	desc.SampleDesc.Count = 1;
+	desc.Usage = D3D11_USAGE_DYNAMIC;
+
+	return pDevice->CreateTexture2D(&desc, nullptr, ppBufferOut) >= 0;
+}
+
 static bool CreateTextureBufferRT(ID3D11Device* pDevice, uint32_t stride, uint32_t width, uint32_t height,
 	ID3D11Texture2D** ppBufferOut)
 {
@@ -129,7 +150,7 @@ static bool CreateTextureBufferRT(ID3D11Device* pDevice, uint32_t stride, uint32
 	desc.Height = height;
 	desc.MipLevels = 1;
 	desc.ArraySize = 1;
-	desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 	desc.CPUAccessFlags = 0;
 	desc.SampleDesc.Count = 1;
 	desc.Usage = D3D11_USAGE_DEFAULT;
@@ -214,7 +235,7 @@ static bool CreateTextureSRV(ID3D11Device* pDevice, ID3D11Texture2D* pBuffer, ID
 static bool CreateTextureRTV(ID3D11Device* pDevice, ID3D11Texture2D* pBuffer, ID3D11RenderTargetView** ppUAVOut)
 {
 	D3D11_RENDER_TARGET_VIEW_DESC renderTargetViewDesc;
-	renderTargetViewDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+	renderTargetViewDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
 	renderTargetViewDesc.ViewDimension = D3D11_RTV_DIMENSION_TEXTURE2D;
 	renderTargetViewDesc.Texture2D.MipSlice = 0;
 
@@ -269,6 +290,17 @@ void BufferManager::addTextureSRV(uint32_t strip, uint32_t width, uint32_t heigh
 {
 	ID3D11Texture2D* buffer;
 	CreateTextureBuffer(DXUTGetD3D11Device(), strip, width, height, &buffer);
+	textures_.emplace_back(buffer);
+
+	ID3D11ShaderResourceView* srv;
+	CreateTextureSRV(DXUTGetD3D11Device(), buffer, &srv);
+	shader_resource_views.emplace_back(srv);
+}
+
+void BufferManager::addTextureSRVFloat4(uint32_t strip, uint32_t width, uint32_t height)
+{
+	ID3D11Texture2D* buffer;
+	CreateTextureBufferFloat4(DXUTGetD3D11Device(), strip, width, height, &buffer);
 	textures_.emplace_back(buffer);
 
 	ID3D11ShaderResourceView* srv;

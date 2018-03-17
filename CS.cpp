@@ -45,6 +45,9 @@ struct CB_VS_PER_DP
 BufferManager render_buffer_manager_;
 Scene scene;
 CModelViewerCamera g_Camera; // A model viewing camera
+D3DXVECTOR3 vecEye(0.0f, 5, 23);
+D3DXVECTOR3 vecAt(0, 5, 0);
+FLOAT fObjectRadius = 10.0f;
 
 RayTracer ray_tracer;
 
@@ -53,7 +56,7 @@ static bool kk_mode = false;
 
 static void initScene()
 {
-	scene.loadObj("scene01.obj");
+	scene.loadObj("scene03.obj");
 	ray_tracer.loadScene();
 	ray_tracer.loadShaders();
 	ray_tracer.createBuffers();
@@ -107,9 +110,6 @@ HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFAC
 		scene.buildBuffers(pd3dDevice);
 
 		// Setup the camera's view parameters
-		D3DXVECTOR3 vecEye(0.0f, 0.0f, 5.0f);
-		D3DXVECTOR3 vecAt(0, 0, 0);
-		FLOAT fObjectRadius = 10.0f;
 
 		g_Camera.SetViewParams(&vecEye, &vecAt);
 		g_Camera.SetRadius(23.0f, 1.5f, fObjectRadius * 30.0f);
@@ -174,30 +174,65 @@ void CALLBACK OnFrameMove(double fTime, float fElapsedTime, void* pUserContext)
 	g_Camera.FrameMove(fElapsedTime);
 	if (ImGui::GetIO().KeysDown['A'])
 	{
-		g_pos.v[0] -= fElapsedTime * speed;
+		vecEye.x -= fElapsedTime * speed;
 	}
 	if (ImGui::GetIO().KeysDown['D'])
 	{
-		g_pos.v[0] += fElapsedTime * speed;
+		vecEye.x += fElapsedTime * speed;
 	}
 
 	if (ImGui::GetIO().KeysDown['Q'])
 	{
-		g_pos.v[1] -= fElapsedTime * speed;
+		vecEye.y -= fElapsedTime * speed;
 	}
 	if (ImGui::GetIO().KeysDown['E'])
 	{
-		g_pos.v[1] += fElapsedTime * speed;
+		vecEye.y += fElapsedTime * speed;
 	}
 
 	if (ImGui::GetIO().KeysDown['W'])
 	{
-		g_pos.v[2] -= fElapsedTime * speed;
+		vecEye.z -= fElapsedTime * speed;
 	}
 	if (ImGui::GetIO().KeysDown['S'])
 	{
-		g_pos.v[2] += fElapsedTime * speed;
+		vecEye.z += fElapsedTime * speed;
 	}
+
+
+	//
+
+
+	if (ImGui::GetIO().KeysDown['H'])
+	{
+		vecAt.x -= fElapsedTime * speed;
+	}
+	if (ImGui::GetIO().KeysDown['K'])
+	{
+		vecAt.x += fElapsedTime * speed;
+	}
+
+	if (ImGui::GetIO().KeysDown['Y'])
+	{
+		vecAt.y -= fElapsedTime * speed;
+	}
+	if (ImGui::GetIO().KeysDown['I'])
+	{
+		vecAt.y += fElapsedTime * speed;
+	}
+
+	if (ImGui::GetIO().KeysDown['U'])
+	{
+		vecAt.z -= fElapsedTime * speed;
+	}
+	if (ImGui::GetIO().KeysDown['J'])
+	{
+		vecAt.z += fElapsedTime * speed;
+	}
+
+
+	//g_Camera.SetViewParams(&vecEye, &vecAt);
+	//g_Camera.SetRadius(23.0f, 1.5f, fObjectRadius * 30.0f);
 }
 
 
@@ -226,15 +261,16 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		ID3D11RenderTargetView * rtv2[3] = { pRTV ,render_buffer_manager_.render_target_views[0],render_buffer_manager_.render_target_views[1]};
 		pd3dImmediateContext->OMSetRenderTargets(3, rtv2, DXUTGetD3D11DepthStencilView());
 		D3DXMATRIX mWorldViewProjection;
-		D3DXVECTOR3 vLightDir;
+		D3DXVECTOR3 up = { 0,1,0 };
+		D3DXVECTOR3 at = vecAt - vecEye;
 		D3DXMATRIX mWorld;
 		D3DXMATRIX mView;
 		D3DXMATRIX mProj;
-		D3DXMatrixTranslation(&mWorld, 0, -5, 0);
-		mWorld = mWorld * *g_Camera.GetWorldMatrix();
+		D3DXMatrixTranslation(&mWorld, 0, 0, 0);
+		//mWorld = *g_Camera.GetWorldMatrix();
 		mProj = *g_Camera.GetProjMatrix();
-		mView = *g_Camera.GetViewMatrix();
-
+		//mView = *g_Camera.GetViewMatrix();
+		D3DXMatrixLookAtLH(&mView,&vecEye,&vecAt,&up);
 		mWorldViewProjection = mWorld * mView * mProj;
 
 
@@ -316,10 +352,31 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		V(pd3dImmediateContext->Map(ray_tracer.constant_buffers_[0], 0, D3D11_MAP_WRITE_DISCARD, 0, &
 			MappedResource));
 		CB_Radix* cb_vs_per_frame = (CB_Radix*)MappedResource.pData;
-		cb_vs_per_frame->pos.v[0] = g_Camera.GetViewMatrix()->m[3][0];
-		cb_vs_per_frame->pos.v[1] = g_Camera.GetViewMatrix()->m[3][1];
-		cb_vs_per_frame->pos.v[2] = g_Camera.GetViewMatrix()->m[3][2];
+		cb_vs_per_frame->pos.v[0] = vecEye.x;
+		cb_vs_per_frame->pos.v[1] = vecEye.y;
+		cb_vs_per_frame->pos.v[2] = vecEye.z;
 		cb_vs_per_frame->node_count = ray_tracer.primitive_count;
+
+		int mat_i = 0;
+		for (auto && material : scene.materials_)
+		{
+			auto& mat = cb_vs_per_frame->mats[mat_i++];
+			mat.ke = material.emission[0] * 10;
+			mat.ns = material.shininess;
+			if(mat.ke <= 0)
+			{
+				mat.kd.v[0] = material.diffuse[0];
+				mat.kd.v[1] = material.diffuse[1];
+				mat.kd.v[2] = material.diffuse[2];
+			}
+			else
+			{
+				mat.kd = { 1,1,1 };
+			}
+			mat.tr = 0;
+			mat.ni = material.ior;
+		}
+
 		pd3dImmediateContext->Unmap(ray_tracer.constant_buffers_[0], 0);
 
 		//for (int i = 0; i < min(ImGui::GetIO().Framerate / 4,1); ++i)

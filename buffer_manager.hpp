@@ -23,6 +23,7 @@ public:
 	void addByteUAV(uint32_t strip, uint32_t count, void* data);
 	void addTextureUAV(uint32_t strip, uint32_t width, uint32_t height);
 	void addTextureSRV(uint32_t strip, uint32_t width, uint32_t height);
+	void addTextureSRVFloat4(uint32_t strip, uint32_t width, uint32_t height);
 	void addTextureSRVWritable(uint32_t strip, uint32_t width, uint32_t height);
 	void addRenderTargetView(uint32_t strip, uint32_t width, uint32_t height);
 	void addCB(uint32_t strip, uint32_t count, void* data);

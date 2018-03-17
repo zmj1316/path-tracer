@@ -38,3 +38,4 @@ struct Ray {
 	float3 direction;
 	float t_max;
 };
+

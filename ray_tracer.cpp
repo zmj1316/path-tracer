@@ -18,7 +18,7 @@ RayTracer::~RayTracer()
 
 void RayTracer::loadScene()
 {
-	scene.loadObj("scene01.obj");
+	scene.loadObj("scene03.obj");
 
 
 	renderer_primitives.resize(scene.triangle_count);
@@ -154,13 +154,13 @@ void RayTracer::createBuffers()
 	}
 
 	{
-		addTextureSRV(sizeof(uint32_t), width, height);
+		addTextureSRVFloat4(sizeof(uint32_t), width, height);
 		gbuffer2_tex_index = textures_.size() - 1;
 		gbuffer2_srv_index = shader_resource_views.size() - 1;
 	}
 
 	{
-		addTextureSRV(sizeof(uint32_t), width, height);
+		addTextureSRVFloat4(sizeof(uint32_t), width, height);
 		gbuffer3_tex_index = textures_.size() - 1;
 		gbuffer3_srv_index = shader_resource_views.size() - 1;
 	}
@@ -241,18 +241,18 @@ void RayTracer::resize(int width, int height)
 		gbuffer_srv_index = shader_resource_views.size() - 1;
 	}
 	{
-		addTextureSRV(sizeof(uint32_t), width, height);
+		addTextureSRVFloat4(sizeof(uint32_t), width, height);
 		gbuffer2_tex_index = textures_.size() - 1;
 		gbuffer2_srv_index = shader_resource_views.size() - 1;
 	}
 	{
-		addTextureSRV(sizeof(uint32_t), width, height);
+		addTextureSRVFloat4(sizeof(uint32_t), width, height);
 		gbuffer3_tex_index = textures_.size() - 1;
 		gbuffer3_srv_index = shader_resource_views.size() - 1;
 	}
 
 	{
-		addTextureSRV(sizeof(uint32_t), width, height);
+		addTextureSRVFloat4(sizeof(uint32_t), width, height);
 		gbuffer4_tex_index = textures_.size() - 1;
 		gbuffer4_srv_index = shader_resource_views.size() - 1;
 	}

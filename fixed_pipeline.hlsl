@@ -34,7 +34,7 @@ struct VS_OUTPUT
 {
 	float4 vPosition	: SV_POSITION;
 	float4 vNormal		: NORMAL;
-	float4 vWORLD		: POSITION;
+	float3 vWORLD		: POSITION;
 };
 
 struct PS_OUTPUT {
@@ -60,8 +60,8 @@ PS_OUTPUT PSMain(VS_OUTPUT Input) : SV_TARGET
 {
 	PS_OUTPUT output;
 	output.color = float4(color,1);
-	output.normal = Input.vNormal;
-	output.normal.w = (matid + 1) / 255.0f;
-	output.position = Input.vWORLD;
+	output.normal.xyz = normalize(Input.vNormal.xyz);
+	output.normal.w = asfloat(matid + 1);
+	output.position = float4(Input.vWORLD,1);
 	return output;
 }

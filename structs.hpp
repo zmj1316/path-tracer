@@ -50,12 +50,21 @@ struct PrimitiveRayCS
 	Bound bound;
 	int index;
 };
-
+struct Material {
+	float ke;
+	float ns;
+	float tr;
+	float ni;
+	vec4 kd;
+	vec4 ks;
+};
 // CS use
 struct CB_Radix
 {
 	int node_count;
 	vec3 pos;
+	Material mats[16];
+
 };
 
 struct CB_RT

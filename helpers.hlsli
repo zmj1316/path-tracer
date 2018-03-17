@@ -1,5 +1,5 @@
 
-#define MY_PI 3.14159
+#define MY_PI 3.1415926
 
 
 uint rand_init(uint val0, uint val1, uint backoff = 16)
