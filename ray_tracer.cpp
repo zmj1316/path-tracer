@@ -16,9 +16,9 @@ RayTracer::~RayTracer()
 }
 
 
-void RayTracer::loadScene()
+void RayTracer::loadScene(const char * filename)
 {
-	scene.loadObj("scene03.obj");
+	scene.loadObj(filename);
 
 
 	renderer_primitives.resize(scene.triangle_count);

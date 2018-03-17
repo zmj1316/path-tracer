@@ -55,7 +55,7 @@ public:
 	int gbuffer4_tex_index = -1;
 	int gbuffer4_srv_index = -1;
 
-	void loadScene();
+	void loadScene(const char * filename);
 	void loadShaders();
 	void createBuffers();
 	ID3D11DeviceContext* pd3dImmediateContext_;

@@ -53,11 +53,11 @@ RayTracer ray_tracer;
 
 static bool save_file = false;
 static bool kk_mode = false;
-
+constexpr char* filename = "scene01.obj";
 static void initScene()
 {
-	scene.loadObj("scene03.obj");
-	ray_tracer.loadScene();
+	scene.loadObj(filename);
+	ray_tracer.loadScene(filename);
 	ray_tracer.loadShaders();
 	ray_tracer.createBuffers();
 	if (kk_mode)
@@ -373,7 +373,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 			{
 				mat.kd = { 1,1,1 };
 			}
-			mat.tr = 0;
+			mat.tr = 1 - material.dissolve;
 			mat.ni = material.ior;
 		}
 
