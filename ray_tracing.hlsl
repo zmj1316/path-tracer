@@ -285,7 +285,7 @@ bool getBounce(float3 view_dir, float3 normal, int id, inout float3 multi, out f
 			float c = 1 - ddn;
 
 			float Re = R0 + (1 - R0) * c * c * c * c * c;
-			float Tr = mat.tr;
+			float Tr = 1 - Re;
 			float P = .25f + .5f * Re;
 			float RP = Re / P;
 			float TP = Tr / (1.f - P);
@@ -315,7 +315,7 @@ bool getBounce(float3 view_dir, float3 normal, int id, inout float3 multi, out f
 			//	u = cross(w, float3(1, 0, 0));
 			//}
 			u = normalize(u);
-			float3 v = 1.3 * (cross(w, u)); // 假装有各向异性
+			float3 v = (cross(w, u)); // 乘以一个系数来假装有各向异性
 			direction = normalize(u*cos(r1)*r2s + v * sin(r1)*r2s + w * height);
 			multi *= mat.ks;
 		}
