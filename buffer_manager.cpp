@@ -123,16 +123,16 @@ static bool CreateTextureBufferFloat4(ID3D11Device* pDevice, uint32_t stride, ui
 
 	D3D11_TEXTURE2D_DESC  desc;
 	ZeroMemory(&desc, sizeof(desc));
-	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+	desc.BindFlags = D3D11_BIND_SHADER_RESOURCE | D3D11_BIND_UNORDERED_ACCESS;
 	desc.MiscFlags = 0;
 	desc.Width = width;
 	desc.Height = height;
 	desc.MipLevels = 1;
 	desc.ArraySize = 1;
 	desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-	desc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+	desc.CPUAccessFlags = 0;
 	desc.SampleDesc.Count = 1;
-	desc.Usage = D3D11_USAGE_DYNAMIC;
+	desc.Usage = D3D11_USAGE_DEFAULT;
 
 	return pDevice->CreateTexture2D(&desc, nullptr, ppBufferOut) >= 0;
 }
@@ -222,6 +222,17 @@ static bool CreateTextureUAV(ID3D11Device* pDevice, ID3D11Texture2D* pBuffer, ID
 	return pDevice->CreateUnorderedAccessView((ID3D11Resource*)pBuffer, &desc, ppUAVOut) >= 0;
 }
 
+static bool CreateTextureUAVFloat4(ID3D11Device* pDevice, ID3D11Texture2D* pBuffer, ID3D11UnorderedAccessView** ppUAVOut)
+{
+	D3D11_UNORDERED_ACCESS_VIEW_DESC desc;
+	ZeroMemory(&desc, sizeof(desc));
+	desc.ViewDimension = D3D11_UAV_DIMENSION_TEXTURE2D;
+	desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
+	desc.Texture2D.MipSlice = 0;
+
+	return pDevice->CreateUnorderedAccessView((ID3D11Resource*)pBuffer, &desc, ppUAVOut) >= 0;
+}
+
 static bool CreateTextureSRV(ID3D11Device* pDevice, ID3D11Texture2D* pBuffer, ID3D11ShaderResourceView** ppUAVOut)
 {
 	D3D11_SHADER_RESOURCE_VIEW_DESC desc;
@@ -283,6 +294,17 @@ void BufferManager::addTextureUAV(uint32_t strip, uint32_t width, uint32_t heigh
 
 	ID3D11UnorderedAccessView* srv;
 	CreateTextureUAV(DXUTGetD3D11Device(), buffer, &srv);
+	unordered_access_views.emplace_back(srv);
+}
+
+void BufferManager::addTextureUAVFloat4(uint32_t strip, uint32_t width, uint32_t height)
+{
+	ID3D11Texture2D* buffer;
+	CreateTextureBufferFloat4(DXUTGetD3D11Device(), strip, width, height, &buffer);
+	textures_.emplace_back(buffer);
+
+	ID3D11UnorderedAccessView* srv;
+	CreateTextureUAVFloat4(DXUTGetD3D11Device(), buffer, &srv);
 	unordered_access_views.emplace_back(srv);
 }
 

@@ -131,9 +131,15 @@ void RayTracer::createBuffers()
 	}
 
 	{
-		addTextureUAV(sizeof(uint32_t), width, height);
+		addTextureUAVFloat4(sizeof(uint32_t), width, height);
 		output_tex_index = textures_.size() - 1;
 		output_tex_uav_index = unordered_access_views.size() - 1;
+	}
+
+	{
+		addTextureUAV(sizeof(uint32_t), width, height);
+		output_unorm_tex_index = textures_.size() - 1;
+		output_unorm_tex_uav_index = unordered_access_views.size() - 1;
 	}
 
 	{
@@ -142,7 +148,7 @@ void RayTracer::createBuffers()
 	}
 
 	{
-		addTextureSRV(sizeof(uint32_t), width, height);
+		addTextureSRVFloat4(sizeof(uint32_t), width, height);
 		old_tex_index = textures_.size() - 1;
 		old_tex_srv_index = shader_resource_views.size() - 1;
 	}
@@ -199,17 +205,25 @@ void RayTracer::resize(int width, int height)
 	if(output_tex_index >= 0 && old_tex_index >= 0)
 	{
 		SAFE_RELEASE(unordered_access_views[output_tex_uav_index]);
+		SAFE_RELEASE(unordered_access_views[output_unorm_tex_uav_index]);
 		SAFE_RELEASE(shader_resource_views[old_tex_srv_index]);
 		SAFE_RELEASE(textures_[output_tex_index]);
+		SAFE_RELEASE(textures_[output_unorm_tex_index]);
 		SAFE_RELEASE(textures_[old_tex_index]);
 	}
 	{
-		addTextureUAV(sizeof(uint32_t), width, height);
+		addTextureUAVFloat4(sizeof(uint32_t), width, height);
 		output_tex_index = textures_.size() - 1;
 		output_tex_uav_index = unordered_access_views.size() - 1;
 	}
+
 	{
-		addTextureSRV(sizeof(uint32_t), width, height);
+		addTextureUAV(sizeof(uint32_t), width, height);
+		output_unorm_tex_index = textures_.size() - 1;
+		output_unorm_tex_uav_index = unordered_access_views.size() - 1;
+	}
+	{
+		addTextureSRVFloat4(sizeof(uint32_t), width, height);
 		old_tex_index = textures_.size() - 1;
 		old_tex_srv_index = shader_resource_views.size() - 1;
 	}
@@ -287,6 +301,7 @@ void RayTracer::trace()
 
 	pd3dImmediateContext_->CSSetUnorderedAccessViews(0, 1, &unordered_access_views[tree_uav_index], nullptr);
 	pd3dImmediateContext_->CSSetUnorderedAccessViews(1, 1, &unordered_access_views[output_tex_uav_index], nullptr);
+	pd3dImmediateContext_->CSSetUnorderedAccessViews(2, 1, &unordered_access_views[output_unorm_tex_uav_index], nullptr);
 	static std::random_device rd;
 	static std::uniform_int_distribution<uint32_t> dist(0, 0xFFFFFFFF);
 

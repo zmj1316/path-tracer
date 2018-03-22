@@ -4,10 +4,11 @@
 // The below texture contains faure permutations, stored in an integer texture:
 
 StructuredBuffer<PrimitiveRender> primitives : register(t0);
-Texture2D<unorm float4> old_texture : register(t1);
+Texture2D<float4> old_texture : register(t1);
 
 RWStructuredBuffer<TreeNode> tree : register(u0);
-RWTexture2D<unorm float4> output : register(u1);
+RWTexture2D<float4> output : register(u1);
+RWTexture2D<unorm float4> output_u : register(u2);
 
 Texture2D<float4> diffuseTex : register(t2);
 Texture2D<float4> normalTex : register(t3);
@@ -416,5 +417,7 @@ void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 
 	float old_factor = 1.0f * framecount / (framecount + 1);
 	float new_factor = 1.0f / (framecount + 1);
-	output[sampleid.xy] = pow(pow(old_texture[sampleid],2.2) * old_factor + this_color * new_factor , 1 /2.2);
+	float4 acced_color = pow(pow(old_texture[sampleid], 2.2) * old_factor + this_color * new_factor, 1 / 2.2);
+	output[sampleid.xy] = acced_color;
+	output_u[sampleid.xy] = acced_color;
 }

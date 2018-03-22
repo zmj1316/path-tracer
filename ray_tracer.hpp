@@ -24,6 +24,7 @@ public:
 
 	int primitive_render_srv_index = -1;
 	int output_tex_uav_index = -1;
+	int output_unorm_tex_uav_index = -1;
 	int rt_cb_index = -1;
 
 	int old_tex_index = -1;
@@ -42,6 +43,7 @@ public:
 	std::vector<PrimitiveRay> ray_primitives;
 	std::vector<PrimitiveRayCS> ray_cs_primitives;
 	int output_tex_index = -1;
+	int output_unorm_tex_index = -1;
 
 	int gbuffer_tex_index = -1;
 	int gbuffer_srv_index = -1;

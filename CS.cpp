@@ -444,7 +444,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 	{
 		ID3D11Resource* r;
 		pRTV->GetResource(&r);
-		pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[ray_tracer.output_tex_index]);
+		pd3dImmediateContext->CopyResource(r, ray_tracer.textures_[ray_tracer.output_unorm_tex_index]);
 		SAFE_RELEASE(r);
 	}
 
@@ -452,7 +452,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 	{
 		wchar_t tmp[255];
 		wsprintf(tmp, L"%dX%dframe_%d.bmp", ray_tracer.width, ray_tracer.height, ray_tracer.frame_count);
-		D3DX11SaveTextureToFile(pd3dImmediateContext, ray_tracer.textures_[ray_tracer.old_tex_index], D3DX11_IFF_BMP, tmp);
+		D3DX11SaveTextureToFile(pd3dImmediateContext, ray_tracer.textures_[ray_tracer.output_unorm_tex_index], D3DX11_IFF_BMP, tmp);
 		save_file = false;
 	}
 
