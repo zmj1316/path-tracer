@@ -14,6 +14,8 @@
 #include "DXUTcamera.h"
 #include "structs.hpp"
 #include "ray_tracer.hpp"
+#include <locale>
+#include <codecvt>
 
 
 #define  NUM_ELEMENTS   2048
@@ -22,7 +24,7 @@ ShaderManager shader_manager_;
 BufferManager compute_buffer_manager_;
 int localBuffer[NUM_ELEMENTS];
 static bool ray = false;
-vec3 g_pos{0,5,17};
+vec3 g_pos{0, 5, 17};
 
 ID3D11RasterizerState* g_noculling_state;
 
@@ -31,7 +33,6 @@ struct CB_VS_PER_FRAME
 {
 	D3DXMATRIX m_WorldViewProj;
 	D3DXMATRIX m_World;
-
 } render_cb_per_frame;
 
 #pragma pack(16)
@@ -53,11 +54,62 @@ RayTracer ray_tracer;
 
 static bool save_file = false;
 static bool kk_mode = false;
-constexpr char* filename = "scene01.obj";
+
+
+static void get_filter_by_extension(WCHAR* buffer, const WCHAR* ext)
+{
+	wsprintf(buffer, L"%s\1*.%s\1\0", ext, ext);
+	for (WCHAR* c = buffer; *c != 0; c++)
+	{
+		if (*c == 1)
+			*c = 0;
+	}
+}
+
+std::string ws2s(const std::wstring& wstr)
+{
+	using convert_typeX = std::codecvt_utf8<wchar_t>;
+	std::wstring_convert<convert_typeX, wchar_t> converterX;
+
+	return converterX.to_bytes(wstr);
+}
+
+static std::string openFile()
+{
+	OPENFILENAME ofn; // common dialog box structure
+	WCHAR szFile[260]; // buffer for file name
+	WCHAR filter[260]; // buffer for file name
+	get_filter_by_extension(filter, L"obj");
+	// Initialize OPENFILENAME
+	ZeroMemory(&ofn, sizeof(ofn));
+	ofn.lStructSize = sizeof(ofn);
+	ofn.hwndOwner = DXUTGetHWNDDeviceWindowed();
+	ofn.lpstrFile = szFile;
+	// Set lpstrFile[0] to '\0' so that GetOpenFileName does not 
+	// use the contents of szFile to initialize itself.
+	ofn.lpstrFile[0] = '\0';
+	ofn.nMaxFile = sizeof(szFile);
+	ofn.lpstrFilter = filter;
+	ofn.nFilterIndex = 0;
+	ofn.lpstrFileTitle = nullptr;
+	ofn.nMaxFileTitle = 0;
+	ofn.lpstrInitialDir = nullptr;
+	ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+	// Display the Open dialog box. 
+
+	if (GetOpenFileName(&ofn) == TRUE)
+		return ws2s(std::wstring(szFile));
+	if (MessageBoxW(nullptr, L"需要指定 Obj 文件！是否使用默认的 scene01.obj？", TEXT("警告"), MB_OKCANCEL) == IDCANCEL)
+		exit(-1);
+	return std::string("scene01.obj");
+}
+
 static void initScene()
 {
-	scene.loadObj(filename);
-	ray_tracer.loadScene(filename);
+	auto filename = openFile();
+	scene.loadObj(filename.c_str());
+	ray_tracer.loadScene(filename.c_str());
 	ray_tracer.loadShaders();
 	ray_tracer.createBuffers();
 	if (kk_mode)
@@ -103,7 +155,8 @@ HRESULT CALLBACK OnD3D11CreateDevice(ID3D11Device* pd3dDevice, const DXGI_SURFAC
 		render_buffer_manager_.addCB(sizeof(CB_VS_PER_DP), 1, &tmp2);
 		for (size_t i = 0; i < 4; i++)
 		{
-			render_buffer_manager_.addRenderTargetView(sizeof(uint32_t), pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height);
+			render_buffer_manager_.addRenderTargetView(sizeof(uint32_t), pBackBufferSurfaceDesc->Width,
+			                                           pBackBufferSurfaceDesc->Height);
 		}
 
 
@@ -158,7 +211,8 @@ HRESULT CALLBACK OnD3D11ResizedSwapChain(ID3D11Device* pd3dDevice, IDXGISwapChai
 		render_buffer_manager_.addCB(sizeof(CB_VS_PER_DP), 1, &tmp2);
 		for (size_t i = 0; i < 4; i++)
 		{
-			render_buffer_manager_.addRenderTargetView(sizeof(uint32_t), pBackBufferSurfaceDesc->Width, pBackBufferSurfaceDesc->Height);
+			render_buffer_manager_.addRenderTargetView(sizeof(uint32_t), pBackBufferSurfaceDesc->Width,
+			                                           pBackBufferSurfaceDesc->Height);
 		}
 	}
 	return S_OK;
@@ -172,64 +226,63 @@ void CALLBACK OnFrameMove(double fTime, float fElapsedTime, void* pUserContext)
 {
 	float speed = 5;
 	g_Camera.FrameMove(fElapsedTime);
-	if (ImGui::GetIO().KeysDown['A'])
+	if (!ray)
 	{
-		vecEye.x -= fElapsedTime * speed;
-	}
-	if (ImGui::GetIO().KeysDown['D'])
-	{
-		vecEye.x += fElapsedTime * speed;
-	}
+		if (ImGui::GetIO().KeysDown['A'])
+		{
+			vecEye.x -= fElapsedTime * speed;
+		}
+		if (ImGui::GetIO().KeysDown['D'])
+		{
+			vecEye.x += fElapsedTime * speed;
+		}
 
-	if (ImGui::GetIO().KeysDown['Q'])
-	{
-		vecEye.y -= fElapsedTime * speed;
-	}
-	if (ImGui::GetIO().KeysDown['E'])
-	{
-		vecEye.y += fElapsedTime * speed;
-	}
+		if (ImGui::GetIO().KeysDown['Q'])
+		{
+			vecEye.y -= fElapsedTime * speed;
+		}
+		if (ImGui::GetIO().KeysDown['E'])
+		{
+			vecEye.y += fElapsedTime * speed;
+		}
 
-	if (ImGui::GetIO().KeysDown['W'])
-	{
-		vecEye.z -= fElapsedTime * speed;
-	}
-	if (ImGui::GetIO().KeysDown['S'])
-	{
-		vecEye.z += fElapsedTime * speed;
-	}
-
-
-	//
+		if (ImGui::GetIO().KeysDown['W'])
+		{
+			vecEye.z -= fElapsedTime * speed;
+		}
+		if (ImGui::GetIO().KeysDown['S'])
+		{
+			vecEye.z += fElapsedTime * speed;
+		}
 
 
-	if (ImGui::GetIO().KeysDown['H'])
-	{
-		vecAt.x -= fElapsedTime * speed;
-	}
-	if (ImGui::GetIO().KeysDown['K'])
-	{
-		vecAt.x += fElapsedTime * speed;
-	}
+		if (ImGui::GetIO().KeysDown['H'])
+		{
+			vecAt.x -= fElapsedTime * speed;
+		}
+		if (ImGui::GetIO().KeysDown['K'])
+		{
+			vecAt.x += fElapsedTime * speed;
+		}
 
-	if (ImGui::GetIO().KeysDown['Y'])
-	{
-		vecAt.y -= fElapsedTime * speed;
-	}
-	if (ImGui::GetIO().KeysDown['I'])
-	{
-		vecAt.y += fElapsedTime * speed;
-	}
+		if (ImGui::GetIO().KeysDown['Y'])
+		{
+			vecAt.y -= fElapsedTime * speed;
+		}
+		if (ImGui::GetIO().KeysDown['I'])
+		{
+			vecAt.y += fElapsedTime * speed;
+		}
 
-	if (ImGui::GetIO().KeysDown['U'])
-	{
-		vecAt.z -= fElapsedTime * speed;
+		if (ImGui::GetIO().KeysDown['U'])
+		{
+			vecAt.z -= fElapsedTime * speed;
+		}
+		if (ImGui::GetIO().KeysDown['J'])
+		{
+			vecAt.z += fElapsedTime * speed;
+		}
 	}
-	if (ImGui::GetIO().KeysDown['J'])
-	{
-		vecAt.z += fElapsedTime * speed;
-	}
-
 
 	//g_Camera.SetViewParams(&vecEye, &vecAt);
 	//g_Camera.SetRadius(23.0f, 1.5f, fObjectRadius * 30.0f);
@@ -258,10 +311,12 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		pd3dImmediateContext->ClearRenderTargetView(render_buffer_manager_.render_target_views[0], ClearColor);
 		pd3dImmediateContext->ClearRenderTargetView(render_buffer_manager_.render_target_views[1], ClearColor);
 
-		ID3D11RenderTargetView * rtv2[3] = { pRTV ,render_buffer_manager_.render_target_views[0],render_buffer_manager_.render_target_views[1]};
+		ID3D11RenderTargetView* rtv2[3] = {
+			pRTV, render_buffer_manager_.render_target_views[0], render_buffer_manager_.render_target_views[1]
+		};
 		pd3dImmediateContext->OMSetRenderTargets(3, rtv2, DXUTGetD3D11DepthStencilView());
 		D3DXMATRIX mWorldViewProjection;
-		D3DXVECTOR3 up = { 0,1,0 };
+		D3DXVECTOR3 up = {0, 1, 0};
 		D3DXVECTOR3 at = vecAt - vecEye;
 		D3DXMATRIX mWorld;
 		D3DXMATRIX mView;
@@ -270,7 +325,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		//mWorld = *g_Camera.GetWorldMatrix();
 		mProj = *g_Camera.GetProjMatrix();
 		//mView = *g_Camera.GetViewMatrix();
-		D3DXMatrixLookAtLH(&mView,&vecEye,&vecAt,&up);
+		D3DXMatrixLookAtLH(&mView, &vecEye, &vecAt, &up);
 		mWorldViewProjection = mWorld * mView * mProj;
 
 
@@ -338,7 +393,6 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 	}
 
 
-
 	if (ray)
 	{
 		/* create query for synchronous dispatches */
@@ -358,12 +412,12 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 		cb_vs_per_frame->node_count = ray_tracer.primitive_count;
 
 		int mat_i = 0;
-		for (auto && material : scene.materials_)
+		for (auto&& material : scene.materials_)
 		{
 			auto& mat = cb_vs_per_frame->mats[mat_i++];
 			mat.ke = material.emission[0] * 10;
 			mat.ns = material.shininess;
-			if(mat.ke <= 0)
+			if (mat.ke <= 0)
 			{
 				mat.kd.v[0] = material.diffuse[0];
 				mat.kd.v[1] = material.diffuse[1];
@@ -371,7 +425,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 			}
 			else
 			{
-				mat.kd = { 1,1,1 };
+				mat.kd = {1, 1, 1};
 			}
 			{
 				mat.ks.v[0] = material.specular[0];
@@ -407,7 +461,9 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 				(ray_tracer.frame_count == 30000) ||
 				(ray_tracer.frame_count == 35000) ||
 				(ray_tracer.frame_count == 40000) ||
+				(ray_tracer.frame_count == 50000) ||
 				(ray_tracer.frame_count == 60000) ||
+				(ray_tracer.frame_count == 70000) ||
 				(ray_tracer.frame_count == 80000) ||
 				(ray_tracer.frame_count == 100000) ||
 				(ray_tracer.frame_count == 120000) ||
@@ -422,7 +478,7 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 				break;
 			}
 
-			if (ray_tracer.frame_count > 400002)
+			if (ray_tracer.frame_count > 100002)
 			{
 				exit(0);
 			}
@@ -452,7 +508,8 @@ void CALLBACK OnD3D11FrameRender(ID3D11Device* pd3dDevice, ID3D11DeviceContext* 
 	{
 		wchar_t tmp[255];
 		wsprintf(tmp, L"%dX%dframe_%d.bmp", ray_tracer.width, ray_tracer.height, ray_tracer.frame_count);
-		D3DX11SaveTextureToFile(pd3dImmediateContext, ray_tracer.textures_[ray_tracer.output_unorm_tex_index], D3DX11_IFF_BMP, tmp);
+		D3DX11SaveTextureToFile(pd3dImmediateContext, ray_tracer.textures_[ray_tracer.output_unorm_tex_index], D3DX11_IFF_BMP,
+		                        tmp);
 		save_file = false;
 	}
 
