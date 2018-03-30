@@ -13,7 +13,6 @@ RWTexture2D<unorm float4> output_u : register(u2);
 Texture2D<float4> diffuseTex : register(t2);
 Texture2D<float4> normalTex : register(t3);
 Texture2D<float4> worldTex : register(t4);
-//#include "Halton.hlsli"
 
 struct Material {
 	float ke;
@@ -402,8 +401,6 @@ void CSMain( uint3 launchIndex : SV_DispatchThreadID )
 {
 	launchIndex.x += g_tid_offset[0];
 	launchIndex.y += g_tid_offset[1];
-	//HaltonState hState;
-	//setupHalton(hState, launchIndex.x, launchIndex.y, 0, 1, framecount, 8);
 
 	if (launchIndex.x > g_tid_offset[2] || launchIndex.y > g_tid_offset[3])
 		return;

@@ -3,7 +3,6 @@
 #include "structs.hpp"
 #include <algorithm>    // std::sort
 #include <random>
-#include "halton_helper.hpp"
 
 
 RayTracer::RayTracer(): pd3dImmediateContext_(nullptr)
@@ -170,17 +169,6 @@ void RayTracer::createBuffers()
 		gbuffer3_tex_index = textures_.size() - 1;
 		gbuffer3_srv_index = shader_resource_views.size() - 1;
 	}
-	//{
-	//	addTextureSRVWritable(sizeof(uint32_t), 256, 256);
-	//	halton_tex_index = textures_.size() - 1;
-	//	halton_tex_srv_index = shader_resource_views.size() - 1;
-
-	//	D3D11_MAPPED_SUBRESOURCE MappedResource;
-	//	DXUTGetD3D11DeviceContext()->Map(textures_[halton_tex_index], 0, D3D11_MAP_WRITE_DISCARD, 0, &
-	//		MappedResource);
-	//	memcpy(MappedResource.pData, createHaltonTexture().data(), sizeof(uint32_t) * 256 * 256);
-	//	DXUTGetD3D11DeviceContext()->Unmap(textures_[halton_tex_index], 0);
-	//}
 }
 
 void RayTracer::run(ID3D11DeviceContext* pd3dImmediateContext)
