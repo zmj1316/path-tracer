@@ -5,4 +5,4 @@ for more infomation see [report](report.md)
 
 # snapshot 
 
-![](1162X1008frame_24440.bmp)
+![](1162X1008frame_24440.png)
